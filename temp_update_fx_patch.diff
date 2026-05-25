@@ -1,0 +1,49 @@
+*** Begin Patch
+*** Update File: g:\AIthings\Codex\treehero\game.js
+@@
+ function updateFx(dt) {
+-  for (const indicator of runtime.indicators) {
+-    indicator.life -= dt;
+-  }
+-  runtime.indicators = runtime.indicators.filter((indicator) => indicator.life > 0);
+-  for (const particle of runtime.particles) {
+-    particle.x += particle.vx * dt;
+-    particle.y += particle.vy * dt;
+-    particle.life -= dt;
+-  }
+-  runtime.particles = runtime.particles.filter((particle) => particle.life > 0);
+-  for (const floater of runtime.floaters) {
+-    floater.y -= dt * 1.2;
+-    floater.life -= dt;
+-  }
+-  runtime.floaters = runtime.floaters.filter((floater) => floater.life > 0);
++  for (let i = runtime.indicators.length - 1; i >= 0; i--) {
++    const indicator = runtime.indicators[i];
++    indicator.life -= dt;
++    if (indicator.life <= 0) {
++      const last = runtime.indicators.pop();
++      if (i < runtime.indicators.length) runtime.indicators[i] = last;
++    }
++  }
++  for (let i = runtime.particles.length - 1; i >= 0; i--) {
++    const particle = runtime.particles[i];
++    particle.x += particle.vx * dt;
++    particle.y += particle.vy * dt;
++    particle.life -= dt;
++    if (particle.life <= 0) {
++      const last = runtime.particles.pop();
++      if (i < runtime.particles.length) runtime.particles[i] = last;
++      runtime.particlePool.push(particle);
++    }
++  }
++  for (let i = runtime.floaters.length - 1; i >= 0; i--) {
++    const floater = runtime.floaters[i];
++    floater.y -= dt * 1.2;
++    floater.life -= dt;
++    if (floater.life <= 0) {
++      const last = runtime.floaters.pop();
++      if (i < runtime.floaters.length) runtime.floaters[i] = last;
++    }
++  }
+ }
+*** End Patch
