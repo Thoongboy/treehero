@@ -1,77 +1,83 @@
 "use strict";
 
+export const ASSET_ROOT = "src/assets";
+
+function assetPath(path) {
+  return `${ASSET_ROOT}/${path}`;
+}
+
 export const imageAssets = {
   menu: {
-    mainSplash: "/assets/art/main_splash.png"
+    mainSplash: assetPath("art/main_splash.png")
   }
 };
 
 export const placeholderImagePaths = {
   "splash.main": imageAssets.menu.mainSplash,
 
-  "character.hero": "/assets/characters/hero.png",
-  "character.inventory": "/assets/characters/inventory.png",
+  "character.hero": assetPath("characters/hero.png"),
+  "character.inventory": assetPath("characters/inventory.png"),
 
-  "tree.trunk": "/assets/tree/trunk.png",
-  "tree.crown": "/assets/tree/crown.png",
-  "tree.sapling": "/assets/tree/sapling.png",
+  "tree.trunk": assetPath("tree/trunk.png"),
+  "tree.crown": assetPath("tree/crown.png"),
+  "tree.sapling": assetPath("tree/sapling.png"),
 
-  "item.weapon.sword": "/assets/items/weapons/sword.png",
-  "item.weapon.greatsword": "/assets/items/weapons/greatsword.png",
-  "item.weapon.axe": "/assets/items/weapons/axe.png",
-  "item.weapon.spear": "/assets/items/weapons/spear.png",
-  "item.weapon.bow": "/assets/items/weapons/bow.png",
-  "item.weapon.crossbow": "/assets/items/weapons/crossbow.png",
-  "item.weapon.staff": "/assets/items/weapons/staff.png",
-  "item.weapon.wand": "/assets/items/weapons/wand.png",
-  "item.weapon.shield": "/assets/items/weapons/shield.png",
-  "item.armor": "/assets/items/armor.png",
-  "item.accessory": "/assets/items/accessory.png",
-  "item.material": "/assets/items/material.png",
-  "item.fertilizer": "/assets/items/fertilizer.png",
-  "item.consumable": "/assets/items/consumable.png",
-  "item.quest": "/assets/items/quest.png",
+  "item.weapon.sword": assetPath("items/weapons/sword.png"),
+  "item.weapon.greatsword": assetPath("items/weapons/greatsword.png"),
+  "item.weapon.axe": assetPath("items/weapons/axe.png"),
+  "item.weapon.spear": assetPath("items/weapons/spear.png"),
+  "item.weapon.bow": assetPath("items/weapons/bow.png"),
+  "item.weapon.crossbow": assetPath("items/weapons/crossbow.png"),
+  "item.weapon.staff": assetPath("items/weapons/staff.png"),
+  "item.weapon.wand": assetPath("items/weapons/wand.png"),
+  "item.weapon.shield": assetPath("items/weapons/shield.png"),
+  "item.armor": assetPath("items/armor.png"),
+  "item.accessory": assetPath("items/accessory.png"),
+  "item.material": assetPath("items/material.png"),
+  "item.fertilizer": assetPath("items/fertilizer.png"),
+  "item.consumable": assetPath("items/consumable.png"),
+  "item.quest": assetPath("items/quest.png"),
 
-  "hud.hp": "/assets/ui/hud/hp.png",
-  "hud.xp": "/assets/ui/hud/xp.png",
-  "hud.tree": "/assets/ui/hud/tree.png",
+  "hud.hp": assetPath("ui/hud/hp.png"),
+  "hud.xp": assetPath("ui/hud/xp.png"),
+  "hud.tree": assetPath("ui/hud/tree.png"),
 
-  "effect.slash": "/assets/effects/slash.png",
-  "effect.fire": "/assets/effects/fire.png",
-  "effect.ice": "/assets/effects/ice.png",
-  "effect.lightning": "/assets/effects/lightning.png",
+  "effect.slash": assetPath("effects/slash.png"),
+  "effect.fire": assetPath("effects/fire.png"),
+  "effect.ice": assetPath("effects/ice.png"),
+  "effect.lightning": assetPath("effects/lightning.png"),
 
-  "ground.grove": "/assets/ground/grove.png",
-  "ground.dungeon": "/assets/ground/dungeon.png",
-  "ground.wall": "/assets/ground/wall.png",
+  "ground.grove": assetPath("ground/grove.png"),
+  "ground.dungeon": assetPath("ground/dungeon.png"),
+  "ground.wall": assetPath("ground/wall.png"),
 
-  campfire: "/assets/grove/campfire.png",
-  shop: "/assets/grove/shop.png",
+  campfire: assetPath("grove/campfire.png"),
+  shop: assetPath("grove/shop.png"),
 
-  "portal.grove": "/assets/portals/grove.png",
-  "portal.floor": "/assets/portals/floor.png",
-  "portal.return": "/assets/portals/return.png",
+  "portal.grove": assetPath("portals/grove.png"),
+  "portal.floor": assetPath("portals/floor.png"),
+  "portal.return": assetPath("portals/return.png"),
 
-  "obstacle.pillar": "/assets/obstacles/pillar.png",
-  "obstacle.roots": "/assets/obstacles/roots.png",
-  "obstacle.rubble": "/assets/obstacles/rubble.png",
+  "obstacle.pillar": assetPath("obstacles/pillar.png"),
+  "obstacle.roots": assetPath("obstacles/roots.png"),
+  "obstacle.rubble": assetPath("obstacles/rubble.png"),
 
-  "monster.gnawer": "/assets/monsters/gnawer.png",
-  "monster.crawler": "/assets/monsters/crawler.png",
-  "monster.shade": "/assets/monsters/shade.png",
-  "monster.spitter": "/assets/monsters/spitter.png",
-  "monster.thornback": "/assets/monsters/thornback.png",
-  "monster.guardian": "/assets/monsters/guardian.png",
+  "monster.gnawer": assetPath("monsters/gnawer.png"),
+  "monster.crawler": assetPath("monsters/crawler.png"),
+  "monster.shade": assetPath("monsters/shade.png"),
+  "monster.spitter": assetPath("monsters/spitter.png"),
+  "monster.thornback": assetPath("monsters/thornback.png"),
+  "monster.guardian": assetPath("monsters/guardian.png"),
 
-  "map.node.monster": "/assets/ui/map/node_monster.png",
-  "map.node.elite": "/assets/ui/map/node_elite.png",
-  "map.node.cache": "/assets/ui/map/node_cache.png",
-  "map.node.boss": "/assets/ui/map/node_boss.png",
+  "map.node.monster": assetPath("ui/map/node_monster.png"),
+  "map.node.elite": assetPath("ui/map/node_elite.png"),
+  "map.node.cache": assetPath("ui/map/node_cache.png"),
+  "map.node.boss": assetPath("ui/map/node_boss.png"),
 
-  "craft.table": "/assets/crafting/table.png",
-  "craft.output": "/assets/crafting/output.png",
+  "craft.table": assetPath("crafting/table.png"),
+  "craft.output": assetPath("crafting/output.png"),
 
-  missing: "/assets/debug/missing.png"
+  missing: assetPath("debug/missing.png")
 };
 
 export const firstImagePreloadIds = [
