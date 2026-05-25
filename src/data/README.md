@@ -2,13 +2,13 @@
 
 Use these files when you want to tune game content without digging through `game.js`.
 
-- `items/weapons.js`: weapon types, melee/ranged/magic mode, projectile settings, and drop weights.
-- `items/armors.js`: armor types and armor trait numbers like HP, defense, avoid, reduction, and shield HP.
-- `items/misc-items.js`: slots, materials, accessories, and rarities.
-- `items/consumable-items.js`: fertilizers and consumables.
+- `items/weapons.js`: weapon types, melee/ranged/magic mode, projectile settings, drop weights, and weapon rarity multipliers.
+- `items/armors.js`: armor types, armor trait numbers, and armor rarity multipliers.
+- `items/misc-items.js`: slots, materials, accessories, rarities, material rarity multipliers, and accessory rarity multipliers.
+- `items/consumable-items.js`: fertilizers, consumables, fertilizer rarity multipliers, and consumable rarity multipliers.
 - `crafting.js`: crafting recipes and recipe outputs.
 - `skills.js`: tree skill definitions and power rating weights.
-- `enemies.js`: enemy archetypes, behavior labels, and boss data.
+- `enemies.js`: enemy archetypes, behavior labels, boss data, and monster damage/scaling numbers.
 - `shop.js`: shop slot count, rarity boost settings, stock types, and upgrade quest data.
 - `tree.js`: tree quests and tree growth settings.
 - `maps.js`: dungeon room layouts, route rows, and map node variations.

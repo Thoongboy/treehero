@@ -14,17 +14,24 @@ import {
   FERTILIZERS,
   CONSUMABLES,
   RARITIES,
+  MATERIAL_RARITY_MULTS,
+  ACCESSORY_RARITY_MULTS,
   WEAPONS,
+  WEAPON_RARITY_MULTS,
   ELEMENTS,
   ARMOR_TRAITS,
   ARMORS,
+  ARMOR_RARITY_MULTS,
   ACCESSORIES,
+  FERTILIZER_RARITY_MULTS,
+  CONSUMABLE_RARITY_MULTS,
   CRAFTING_RECIPES,
   TREE_SKILLS,
   QUESTS,
   DUNGEON_LAYOUTS,
   MONSTER_ARCHETYPES,
   BOSS_ARCHETYPE,
+  ENEMY_SCALING,
   SHOP_SETTINGS,
   SHOP_STOCK
 } from "./data.js";
@@ -407,6 +414,7 @@ function normalizeState() {
     state.dungeon.room.spawns ||= [];
     state.dungeon.room.threat ||= dungeonThreat(state.dungeon.depth || 1);
     state.dungeon.room.exit ||= { x: Math.floor(state.dungeon.room.size / 2), y: 3.7 };
+    rebalanceRoomEnemies(state.dungeon.room);
   }
   if (state.area === "dungeon" && state.dungeon.room?.cleared && !state.dungeon.room.portal) {
     state.dungeon.room.portal = makeFloorPortal(state.dungeon.room.kind);
@@ -726,7 +734,7 @@ function updateDungeon(dt, stats) {
     const postDist = distance(enemy, state.player);
     if (postDist <= enemy.range && enemy.cd <= 0) {
       enemy.cd = enemy.attackType === "ranged" ? 1.55 : enemy.elite ? 1.05 : 1.25;
-      const amount = Math.max(1, Math.floor(enemy.attack - stats.defense * 0.45 + rand(0, enemy.attackType === "ranged" ? 3 : 4)));
+      const amount = enemyDamageAmount(enemy, stats);
       if (enemy.attackType === "ranged") {
         spawnIndicator({ kind: "blast", x: state.player.x, y: state.player.y, radius: 0.72, color: "#b9d46a", life: 0.22, max: 0.22, ring: true });
         spawnParticle(state.player.x, state.player.y, "#b9d46a", 1.1);
@@ -737,6 +745,14 @@ function updateDungeon(dt, stats) {
     }
   room.enemies = room.enemies.filter((enemy) => enemy.hp > 0);
   if (!room.cleared && room.enemies.length === 0) clearRoom();
+}
+
+function enemyDamageAmount(enemy, heroStats) {
+  const variance = enemy.attackType === "ranged" ? ENEMY_SCALING.rangedDamageVariance : ENEMY_SCALING.meleeDamageVariance;
+  return Math.max(
+    ENEMY_SCALING.minimumDamage,
+    Math.floor(enemy.attack - heroStats.defense * ENEMY_SCALING.heroDefenseDamageReduction + rand(0, variance))
+  );
 }
 
 function updateProjectiles(dt) {
@@ -1314,6 +1330,16 @@ function currentMapSize() {
   return state.area === "grove" ? GROVE_SIZE : state.dungeon.room?.size || MAP_SIZE;
 }
 
+function rebalanceRoomEnemies(room) {
+  if (!room?.enemies?.length) return;
+  const threat = room.threat || dungeonThreat(state.dungeon.depth || 1);
+  for (const enemy of room.enemies) {
+    const archetype = enemyArchetype(enemy);
+    enemy.attack = enemyAttackValue(archetype, threat, enemy.elite, enemy.boss);
+    enemy.defense = enemyDefenseValue(archetype, threat, enemy.elite);
+  }
+}
+
 function makeEnemy(type, depth, index, activeRoom = state.dungeon.room) {
   const elite = type === "elite";
   const boss = type === "boss";
@@ -1325,7 +1351,7 @@ function makeEnemy(type, depth, index, activeRoom = state.dungeon.room) {
   const radius = boss ? 0 : 3.2 + (index % 4) * 0.65;
   const x = spawn ? spawn.x : (currentMapSize() / 2 + Math.cos(angle) * radius);
   const y = spawn ? spawn.y : (currentMapSize() * 0.38 + Math.sin(angle) * radius);
-  const eliteMult = elite ? 1.34 : 1;
+  const eliteHpMult = elite ? ENEMY_SCALING.eliteHpMult : 1;
   return {
     id: uid(),
     name: elite && !boss ? `Elder ${archetype.name}` : archetype.name,
@@ -1335,13 +1361,13 @@ function makeEnemy(type, depth, index, activeRoom = state.dungeon.room) {
     effect: archetype.effect || null,
     x: clamp(x + rand(-0.55, 0.55), 2.1, currentMapSize() - 2.1),
     y: clamp(y + rand(-0.55, 0.55), 2.1, currentMapSize() - 2.1),
-    hp: Math.floor((36 + threat * 15) * archetype.hp * (boss ? 1 : eliteMult)),
-    maxHp: Math.floor((36 + threat * 15) * archetype.hp * (boss ? 1 : eliteMult)),
-    attack: Math.floor((8 + threat * 2.85) * archetype.attack * (elite ? 1.22 : 1)),
-    defense: Math.floor((2 + threat * 1.05) * archetype.defense * (elite ? 1.16 : 1)),
-    speed: archetype.speed * (elite ? 1.06 : 1),
+    hp: Math.floor((ENEMY_SCALING.hpBase + threat * ENEMY_SCALING.hpPerThreat) * archetype.hp * (boss ? 1 : eliteHpMult)),
+    maxHp: Math.floor((ENEMY_SCALING.hpBase + threat * ENEMY_SCALING.hpPerThreat) * archetype.hp * (boss ? 1 : eliteHpMult)),
+    attack: enemyAttackValue(archetype, threat, elite, boss),
+    defense: enemyDefenseValue(archetype, threat, elite),
+    speed: archetype.speed * (elite ? ENEMY_SCALING.eliteSpeedMult : 1),
     range: archetype.range,
-    radius: archetype.radius * (elite ? 1.12 : 1),
+    radius: archetype.radius * (elite ? ENEMY_SCALING.eliteRadiusMult : 1),
     gold: Math.floor(7 + threat * 4.3 + (boss ? 90 : elite ? 34 : 0)),
     xp: Math.floor(20 + threat * 11 + (boss ? 160 : elite ? 52 : 0)),
     cd: rand(0.3, 1.2),
@@ -1350,6 +1376,21 @@ function makeEnemy(type, depth, index, activeRoom = state.dungeon.room) {
     elite,
     boss
   };
+}
+
+function enemyArchetype(enemy) {
+  if (enemy.boss || enemy.archetype === BOSS_ARCHETYPE.id) return BOSS_ARCHETYPE;
+  return MONSTER_ARCHETYPES.find((entry) => entry.id === enemy.archetype) || MONSTER_ARCHETYPES[0];
+}
+
+function enemyAttackValue(archetype, threat, elite = false, boss = false) {
+  const mult = boss ? ENEMY_SCALING.bossAttackMult : elite ? ENEMY_SCALING.eliteAttackMult : ENEMY_SCALING.normalAttackMult;
+  return Math.floor((ENEMY_SCALING.attackBase + threat * ENEMY_SCALING.attackPerThreat) * archetype.attack * mult);
+}
+
+function enemyDefenseValue(archetype, threat, elite = false) {
+  const mult = elite ? ENEMY_SCALING.eliteDefenseMult : 1;
+  return Math.floor((ENEMY_SCALING.defenseBase + threat * ENEMY_SCALING.defensePerThreat) * archetype.defense * mult);
 }
 
 function pickMonsterArchetype(type, depth, index) {
@@ -2314,11 +2355,13 @@ function formatSigned(value, key = "") {
 
 function consumableUse(item) {
   if (item.use) return item.use;
-  if (item.name === "Recovery Potion") return { heal: 80 };
-  if (item.name === "Ironbark Stew") return { heal: 45, xp: 20 };
-  if (item.name === "Moon Sap Tonic") return { treeXp: 35, xp: 15 };
-  if (item.name === "Secret Seed") return { stat: 1 };
-  return { xp: 35 };
+  const mult = item.useMult || 1;
+  const scaled = (value) => Math.ceil(value * mult);
+  if (item.name === "Recovery Potion") return { heal: scaled(80) };
+  if (item.name === "Ironbark Stew") return { heal: scaled(45), xp: scaled(20) };
+  if (item.name === "Moon Sap Tonic") return { treeXp: scaled(35), xp: scaled(15) };
+  if (item.name === "Secret Seed") return { stat: Math.max(1, Math.round(mult)) };
+  return { xp: scaled(35) };
 }
 
 function consumableUseText(item) {
@@ -2499,13 +2542,15 @@ function statBlock() {
 
 function makeItem(kind, level = 1, boost = 0) {
   const rarity = rollRarity(boost);
-  const item = { id: uid(), kind, rarity: rarity.name, level, qty: 1, value: Math.ceil((10 + level * 7) * rarity.mult), name: kind };
+  const item = { id: uid(), kind, rarity: rarity.name, level, qty: 1, value: itemValue(level, rarity.mult), name: kind };
   if (kind === "weapon") {
     const base = pickWeighted(WEAPONS);
+    const profile = base.rarityProfile || "balanced";
     item.type = base.type;
     item.class = base.class || base.type;
     item.name = rarity.name === "common" ? base.type : `${title(rarity.name)} ${base.type}`;
     item.slot = base.slot;
+    item.value = itemValue(level, rarityMult(WEAPON_RARITY_MULTS, profile, "value", rarity.name));
     item.range = base.range;
     item.speed = base.speed;
     item.mode = base.mode;
@@ -2544,50 +2589,86 @@ function makeItem(kind, level = 1, boost = 0) {
       }
     }
     if (base.type === "Shield") {
-      item.stats = { defense: Math.ceil((5 + level * 1.8) * rarity.mult), hp: Math.ceil((8 + level * 3) * rarity.mult) };
+      item.stats = {
+        defense: Math.ceil((5 + level * 1.8) * rarityMult(WEAPON_RARITY_MULTS, profile, "defense", rarity.name)),
+        hp: Math.ceil((8 + level * 3) * rarityMult(WEAPON_RARITY_MULTS, profile, "hp", rarity.name))
+      };
     } else if (base.stat === "int") {
-      item.stats = { attack: Math.ceil((5 + level * 2.2) * rarity.mult), int: Math.ceil(1 + level * 0.3) };
+      item.stats = {
+        attack: Math.ceil((5 + level * 2.2) * rarityMult(WEAPON_RARITY_MULTS, profile, "attack", rarity.name)),
+        int: Math.ceil((1 + level * 0.3) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
+      };
     } else {
-      item.stats = { attack: Math.ceil((6 + level * 2.5) * rarity.mult), [base.stat]: Math.ceil(level * 0.22) };
+      item.stats = {
+        attack: Math.ceil((6 + level * 2.5) * rarityMult(WEAPON_RARITY_MULTS, profile, "attack", rarity.name)),
+        [base.stat]: Math.ceil(Math.max(0.2, level * 0.22) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
+      };
     }
   }
   if (kind === "armor") {
     const base = pick(ARMORS);
     const trait = ARMOR_TRAITS[base.weight] || ARMOR_TRAITS.medium;
+    const profile = base.rarityProfile || base.weight || "medium";
     item.type = base.type;
     item.name = rarity.name === "common" ? base.type : `${title(rarity.name)} ${base.type}`;
     item.slot = base.slot;
+    item.value = itemValue(level, rarityMult(ARMOR_RARITY_MULTS, profile, "value", rarity.name));
     item.stats = {
-      defense: Math.ceil((4 + level * 1.6) * rarity.mult * trait.defenseMult),
-      hp: Math.ceil((5 + level * 3) * rarity.mult * trait.hpMult)
+      defense: Math.ceil((4 + level * 1.6) * rarityMult(ARMOR_RARITY_MULTS, profile, "defense", rarity.name) * trait.defenseMult),
+      hp: Math.ceil((5 + level * 3) * rarityMult(ARMOR_RARITY_MULTS, profile, "hp", rarity.name) * trait.hpMult)
     };
   }
   if (kind === "accessory") {
     const base = pick(ACCESSORIES);
+    const profile = base.rarityProfile || base.slot || "ring";
     const stat = pick(["str", "dex", "int", "vit", "crit"]);
     item.type = base.type;
     item.name = rarity.name === "common" ? base.type : `${title(rarity.name)} ${base.type}`;
     item.slot = base.slot;
-    item.stats = stat === "crit" ? { crit: 0.03 + level * 0.002 } : { [stat]: Math.ceil((1 + level / 4) * rarity.mult) };
-    if (base.slot === "belt") item.slots = 6 + RARITIES.findIndex((entry) => entry.name === rarity.name) * 6 + Math.floor(level / 4) * 6;
+    item.value = itemValue(level, rarityMult(ACCESSORY_RARITY_MULTS, profile, "value", rarity.name));
+    item.stats = stat === "crit"
+      ? { crit: Number(((0.03 + level * 0.002) * rarityMult(ACCESSORY_RARITY_MULTS, profile, "crit", rarity.name)).toFixed(3)) }
+      : { [stat]: Math.ceil((1 + level / 4) * rarityMult(ACCESSORY_RARITY_MULTS, profile, "stat", rarity.name)) };
+    if (base.slot === "belt") item.slots = Math.ceil((6 + Math.floor(level / 4) * 6) * rarityMult(ACCESSORY_RARITY_MULTS, profile, "slots", rarity.name));
   }
   if (kind === "material") {
-    item.name = pick(MATERIALS);
-    item.value = 12 + level * 3;
+    const base = pick(MATERIALS);
+    const profile = base.rarityProfile || "commonMaterial";
+    item.name = itemBaseName(base);
+    item.value = Math.ceil((12 + level * 3) * rarityMult(MATERIAL_RARITY_MULTS, profile, "value", rarity.name));
   }
   if (kind === "fertilizer") {
     const index = clamp(Math.floor(level / 3), 0, FERTILIZERS.length - 1);
     const base = FERTILIZERS[index];
+    const profile = base.rarityProfile || "faint";
     item.name = base.name;
-    item.treeXp = base.xp;
-    item.value = base.value;
+    item.treeXp = Math.ceil(base.xp * rarityMult(FERTILIZER_RARITY_MULTS, profile, "treeXp", rarity.name));
+    item.value = Math.ceil(base.value * rarityMult(FERTILIZER_RARITY_MULTS, profile, "value", rarity.name));
   }
   if (kind === "consumable") {
-    item.name = pick(CONSUMABLES);
-    item.value = item.name === "Secret Seed" ? 120 : 28 + level * 4;
+    const base = pick(CONSUMABLES);
+    const profile = base.rarityProfile || "potion";
+    item.name = itemBaseName(base);
+    item.value = Math.ceil((base.value || 28 + level * 4) * rarityMult(CONSUMABLE_RARITY_MULTS, profile, "value", rarity.name));
+    item.useMult = rarityMult(CONSUMABLE_RARITY_MULTS, profile, "use", rarity.name);
     item.use = consumableUse(item);
   }
   return item;
+}
+
+function itemValue(level, mult = 1) {
+  return Math.ceil((10 + level * 7) * mult);
+}
+
+function itemBaseName(base) {
+  return typeof base === "string" ? base : base.name;
+}
+
+function rarityMult(profiles, profile, stat, rarityName) {
+  return profiles?.[profile]?.[stat]?.[rarityName]
+    ?? profiles?.default?.[stat]?.[rarityName]
+    ?? RARITIES.find((entry) => entry.name === rarityName)?.mult
+    ?? 1;
 }
 
 function pickWeighted(entries, weightKey = "dropWeight") {
@@ -2619,7 +2700,7 @@ function statBlockSafeLoot() {
 function addItem(item) {
   const stackable = ["material", "fertilizer", "consumable", "quest"].includes(item.kind);
   if (stackable) {
-    const found = state.hero.inventory.find((current) => current.kind === item.kind && current.name === item.name);
+    const found = state.hero.inventory.find((current) => canStackItems(current, item));
     if (found) {
       found.qty += item.qty || 1;
       saveGame();
@@ -2628,6 +2709,12 @@ function addItem(item) {
   }
   state.hero.inventory.push(item);
   saveGame();
+}
+
+function canStackItems(a, b) {
+  if (a.kind !== b.kind || a.name !== b.name) return false;
+  if (a.kind === "quest") return true;
+  return (a.rarity || "common") === (b.rarity || "common");
 }
 
 function removeItem(id, qty = 1) {

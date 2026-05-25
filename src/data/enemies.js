@@ -21,3 +21,23 @@ export const BOSS_ARCHETYPE = {
   attackType: "melee",
   behavior: "boss"
 };
+
+export const ENEMY_SCALING = {
+  hpBase: 36,
+  hpPerThreat: 15,
+  attackBase: 7,
+  attackPerThreat: 1.95,
+  defenseBase: 2,
+  defensePerThreat: 1.05,
+  normalAttackMult: 1,
+  eliteAttackMult: 1.14,
+  bossAttackMult: 0.94,
+  eliteDefenseMult: 1.16,
+  eliteHpMult: 1.34,
+  eliteSpeedMult: 1.06,
+  eliteRadiusMult: 1.12,
+  heroDefenseDamageReduction: 0.72,
+  meleeDamageVariance: 3,
+  rangedDamageVariance: 2,
+  minimumDamage: 1
+};
