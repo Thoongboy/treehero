@@ -1,6 +1,7 @@
 "use strict";
 
 export * from "./src/data/game-config.js";
+export * from "./src/data/player.js";
 export * from "./src/data/items/misc-items.js";
 export * from "./src/data/items/weapons.js";
 export * from "./src/data/items/armors.js";

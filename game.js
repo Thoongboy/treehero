@@ -9,6 +9,9 @@ import {
   AUTOSAVE_MS,
   MAX_PARTICLES,
   MAX_PROJECTILES,
+  PLAYER_DEFAULTS,
+  HERO_PROGRESSION,
+  ORIGIN_STARTS,
   SLOTS,
   MATERIALS,
   FERTILIZERS,
@@ -56,71 +59,6 @@ import { getGroveInteractions, groveStations, serializeGroveLayout } from "./src
 import { createPlaceholderImageSourceMap, firstImagePreloadIds, imageAssets } from "./src/data/images.js";
 
 const RECIPES = CRAFTING_RECIPES;
-
-const ORIGIN_STARTS = {
-  Forager: {
-    base: { str: 4, dex: 6, int: 5, vit: 6 },
-    gold: 95,
-    message: "You wake as a root-forager: spear, pouch, and mulch ready. The tree asks for fertilizer first.",
-    equipment: [
-      () => makeStarterWeapon("Spear", { name: "Rootfork Spear", stats: { attack: 8, dex: 1 }, cleave: 2, value: 42 }),
-      () => makeStarterArmor("Light Armor", { name: "Patchwork Jerkin", stats: { defense: 4, hp: 8 }, value: 32 }),
-      () => makeStarterAccessory("Belt", { name: "Forager Pouch", stats: { dex: 1 }, slots: 12, value: 48 })
-    ],
-    inventory: [
-      () => makeStarterFertilizer(1),
-      () => makeStarterMaterial("Root Resin", 1),
-      () => makeStarterMaterial("Glowcap Fiber", 1),
-      () => makeStarterConsumable("Recovery Potion", 2),
-      () => makeStarterConsumable("Ironbark Stew", 1)
-    ]
-  },
-  Soldier: {
-    base: { str: 7, dex: 4, int: 3, vit: 7 },
-    gold: 65,
-    message: "You arrive as a root-soldier: mail, sword, and buckler. The tree wants fangs from the first tunnel.",
-    equipment: [
-      () => makeStarterWeapon("Sword", { name: "Militia Sword", stats: { attack: 10, str: 1 }, cleave: 2, value: 44 }),
-      () => makeStarterWeapon("Shield", { name: "Oath Buckler", stats: { defense: 7, hp: 10 }, value: 42 }),
-      () => makeStarterArmor("Heavy Armor", { name: "Dented Mail", stats: { defense: 8, hp: 18 }, value: 52 })
-    ],
-    inventory: [
-      () => makeStarterMaterial("Monster Fang", 1),
-      () => makeStarterConsumable("Recovery Potion", 2)
-    ]
-  },
-  Hunter: {
-    base: { str: 4, dex: 8, int: 4, vit: 5 },
-    gold: 75,
-    message: "You step in as a tunnel-hunter: crossbow loaded, boots quiet. Bring back dungeon scraps for the tree's map.",
-    equipment: [
-      () => makeStarterWeapon("Crossbow", { name: "Yew Crossbow", stats: { attack: 9, dex: 2 }, effect: "pierce", pierce: 1, value: 48 }),
-      () => makeStarterArmor("Light Armor", { name: "Stalker Leathers", stats: { defense: 4, dex: 1, hp: 6 }, value: 38 }),
-      () => makeStarterArmor("Light Boots", { name: "Trail Boots", stats: { defense: 2, dex: 1 }, value: 28 })
-    ],
-    inventory: [
-      () => makeStarterMaterial("Monster Fang", 1),
-      () => makeStarterMaterial("Ironwood Scrap", 1),
-      () => makeStarterConsumable("Recovery Potion", 2),
-      () => makeStarterConsumable("Ironbark Stew", 1)
-    ]
-  },
-  Apprentice: {
-    base: { str: 3, dex: 5, int: 8, vit: 5 },
-    gold: 85,
-    message: "You begin as a sap-apprentice: wand crackling with lightning. The tree asks for rune dust.",
-    equipment: [
-      () => makeStarterWeapon("Wand", { name: "Spark-Twig Wand", stats: { attack: 7, int: 2 }, element: "lightning", chain: 2, chainRange: 2.85, chainDamage: 0.62, value: 50 }),
-      () => makeStarterArmor("Medium Armor", { name: "Padded Robe", stats: { defense: 3, int: 1, hp: 8 }, value: 36 }),
-      () => makeStarterAccessory("Amulet", { name: "Apprentice Charm", stats: { int: 1 }, value: 34 })
-    ],
-    inventory: [
-      () => makeStarterMaterial("Rune Dust", 1),
-      () => makeStarterConsumable("Recovery Potion", 1),
-      () => makeStarterConsumable("Moon Sap Tonic", 1)
-    ]
-  }
-};
 
 const runtime = {
   app: document.getElementById("app"),
@@ -210,14 +148,14 @@ function makeFreshState() {
     message: "The tree stirs. The dungeon below is hungry.",
     settings: { autosave: true, screenshake: true },
     hero: {
-      name: "Ash",
-      origin: "Forager",
-      level: 1,
-      xp: 0,
-      gold: 80,
-      hp: 120,
-      base: { str: 5, dex: 5, int: 5, vit: 6 },
-      points: 0,
+      name: PLAYER_DEFAULTS.name,
+      origin: PLAYER_DEFAULTS.origin,
+      level: PLAYER_DEFAULTS.level,
+      xp: PLAYER_DEFAULTS.xp,
+      gold: PLAYER_DEFAULTS.gold,
+      hp: PLAYER_DEFAULTS.hp,
+      base: { ...PLAYER_DEFAULTS.base },
+      points: PLAYER_DEFAULTS.points,
       inventory: [],
       equipment: Object.fromEntries(SLOTS.map((slot) => [slot, null]))
     },
@@ -229,7 +167,7 @@ function makeFreshState() {
     },
     quests: QUESTS.map((quest) => ({ id: quest.id, done: false })),
     upgrades: { craft: 1, enhance: 0, shop: 0 },
-    player: { x: 8.5, y: 11.5, dir: 0, moveDir: 0, attackCd: 0, attackT: 0, invuln: 0 },
+    player: { ...PLAYER_DEFAULTS.startPosition },
     dungeon: { depth: 0, bestDepth: 0, room: null, map: null, currentNode: null, runComplete: false },
     shop: [],
     log: []
@@ -240,7 +178,7 @@ function startNewHero(form) {
   state = makeFreshState();
   exposeState();
   state.mode = "game";
-  state.hero.name = form.heroName.value.trim() || "Ash";
+  state.hero.name = form.heroName.value.trim() || PLAYER_DEFAULTS.name;
   applyOriginStart(form.origin.value);
   refreshShop();
   state.hero.hp = statBlock().maxHp;
@@ -249,28 +187,29 @@ function startNewHero(form) {
   mountGame();
 }
 
-function makeStarterCrossbow() {
-  return makeStarterWeapon("Crossbow", {
-    name: "Training Crossbow",
-    stats: { attack: 7, dex: 1 },
-    effect: "pierce",
-    pierce: 1,
-    value: 34
-  });
-}
-
 function applyOriginStart(origin) {
-  const config = ORIGIN_STARTS[origin] || ORIGIN_STARTS.Forager;
-  state.hero.origin = ORIGIN_STARTS[origin] ? origin : "Forager";
+  const fallbackOrigin = PLAYER_DEFAULTS.origin;
+  const config = ORIGIN_STARTS[origin] || ORIGIN_STARTS[fallbackOrigin];
+  state.hero.origin = ORIGIN_STARTS[origin] ? origin : fallbackOrigin;
   state.hero.base = { ...config.base };
   state.hero.gold = config.gold;
   state.hero.inventory = [];
   state.hero.equipment = Object.fromEntries(SLOTS.map((slot) => [slot, null]));
-  for (const makeEquipment of config.equipment) {
-    const item = makeEquipment();
+  for (const spec of config.equipment) {
+    const item = makeStarterItem(spec);
     state.hero.equipment[item.slot] = item;
   }
-  for (const makeInventory of config.inventory) addItem(makeInventory());
+  for (const spec of config.inventory) addItem(makeStarterItem(spec));
+}
+
+function makeStarterItem(spec) {
+  if (spec.kind === "weapon") return makeStarterWeapon(spec.type, spec.options || {});
+  if (spec.kind === "armor") return makeStarterArmor(spec.type, spec.options || {});
+  if (spec.kind === "accessory") return makeStarterAccessory(spec.type, spec.options || {});
+  if (spec.kind === "consumable") return makeStarterConsumable(spec.name, spec.qty || 1);
+  if (spec.kind === "material") return makeStarterMaterial(spec.name, spec.qty || 1);
+  if (spec.kind === "fertilizer") return makeStarterFertilizer(spec.qty || 1);
+  return { id: uid(), kind: spec.kind || "material", name: spec.name || "Unknown Item", qty: spec.qty || 1, value: spec.value || 1 };
 }
 
 function makeStarterWeapon(type, options = {}) {
@@ -384,8 +323,8 @@ function continueGame() {
 
 function normalizeState() {
   state.overlay = null;
-  state.hero.origin ||= "Forager";
-  state.player ||= { x: 8.5, y: 11.5, dir: 0, attackCd: 0, attackT: 0, invuln: 0 };
+  state.hero.origin ||= PLAYER_DEFAULTS.origin;
+  state.player ||= { ...PLAYER_DEFAULTS.startPosition };
   state.player.moveDir ??= state.player.dir || 0;
   const mapSize = state.area === "grove" ? GROVE_SIZE : MAP_SIZE;
   if (state.area === "grove" && ((state.player.x ?? 0) >= mapSize - 1.25 || (state.player.y ?? 0) >= mapSize - 1.25)) {
@@ -424,6 +363,9 @@ function normalizeState() {
 
 function renderMenu() {
   const hasSave = saveSystem.hasSave();
+  const originOptions = Object.keys(ORIGIN_STARTS)
+    .map((origin) => `<option>${escapeHtml(origin)}</option>`)
+    .join("");
   runtime.app.innerHTML = `
     <main class="menu-screen">
       <section class="menu-panel">
@@ -440,7 +382,7 @@ function renderMenu() {
           </div>
           <form id="creator" class="creator" hidden onsubmit="event.preventDefault(); startNewHero(this)">
             <label>Hero Name<input name="heroName" maxlength="18" placeholder="Ash" /></label>
-            <label>Origin<select name="origin"><option>Forager</option><option>Soldier</option><option>Hunter</option><option>Apprentice</option></select></label>
+            <label>Origin<select name="origin">${originOptions}</select></label>
             <button class="gold" type="submit">Begin</button>
           </form>
         </div>
@@ -2447,7 +2389,7 @@ function treeOverlay() {
 }
 
 function visibleQuests() {
-  const origin = state.hero.origin || "Forager";
+  const origin = state.hero.origin || PLAYER_DEFAULTS.origin;
   return QUESTS
     .filter((quest) => !quest.origin || quest.origin === origin)
     .sort((a, b) => Number(Boolean(b.origin)) - Number(Boolean(a.origin)));
@@ -2795,7 +2737,7 @@ function useItem(id) {
   if (use.heal) state.hero.hp = Math.min(statBlock().maxHp, state.hero.hp + use.heal);
   if (use.xp) gainXp(use.xp);
   if (use.treeXp) gainTreeXp(use.treeXp);
-  if (use.stat) state.hero.base[pick(["str", "dex", "int", "vit"])] += use.stat;
+  if (use.stat) state.hero.base[pick(HERO_PROGRESSION.secretSeedStats)] += use.stat;
   removeItem(id, 1);
   toast(`Used ${item.name}`);
   saveGame();
@@ -2923,7 +2865,7 @@ function allocateStat(stat) {
   if (state.hero.points <= 0) return;
   state.hero.base[stat] += 1;
   state.hero.points -= 1;
-  if (stat === "vit") state.hero.hp += 8;
+  if (stat === "vit") state.hero.hp += HERO_PROGRESSION.hpGainWhenAllocatingVit;
   state.hero.hp = Math.min(state.hero.hp, statBlock().maxHp);
   saveGame();
   renderOverlay();
@@ -2934,7 +2876,7 @@ function gainXp(amount) {
   while (state.hero.xp >= xpToLevel(state.hero.level)) {
     state.hero.xp -= xpToLevel(state.hero.level);
     state.hero.level += 1;
-    state.hero.points += 3;
+    state.hero.points += HERO_PROGRESSION.statPointsPerLevel;
     state.hero.hp = statBlock().maxHp;
     state.message = `${state.hero.name} reached level ${state.hero.level}.`;
     toast("Level up.");

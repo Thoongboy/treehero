@@ -1,7 +1,5 @@
 "use strict";
 
-export const SLOTS = ["weapon", "offhand", "helm", "armor", "boots", "gloves", "ring", "amulet", "belt"];
-
 export const MATERIALS = [
   { name: "Ironwood Scrap", rarityProfile: "commonMaterial" },
   { name: "Monster Fang", rarityProfile: "monsterPart" },
