@@ -3,7 +3,9 @@
 Use these files when you want to tune game content without digging through `game.js`.
 
 - `items/weapons.js`: weapon types, melee/ranged/magic mode, projectile settings, drop weights, and weapon rarity multipliers.
+- `items/weapon-modifiers.js`: random weapon stat variance, modifier counts by rarity, and mode-specific modifier pools.
 - `items/armors.js`: armor types, armor trait numbers, and armor rarity multipliers.
+- `items/armor-modifiers.js`: random armor stat variance, modifier counts by rarity, and weight/slot-specific modifier pools.
 - `items/misc-items.js`: materials, accessories, rarities, material rarity multipliers, and accessory rarity multipliers.
 - `items/consumable-items.js`: fertilizers, consumables, fertilizer rarity multipliers, and consumable rarity multipliers.
 - `player.js`: hero default stats, player start position, stat point rules, origins, and starting equipment/inventory.

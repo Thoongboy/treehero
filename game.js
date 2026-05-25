@@ -21,10 +21,16 @@ import {
   ACCESSORY_RARITY_MULTS,
   WEAPONS,
   WEAPON_RARITY_MULTS,
+  WEAPON_STAT_VARIANCE,
+  WEAPON_MODIFIER_COUNTS,
+  WEAPON_MODIFIER_POOLS,
   ELEMENTS,
   ARMOR_TRAITS,
   ARMORS,
   ARMOR_RARITY_MULTS,
+  ARMOR_STAT_VARIANCE,
+  ARMOR_MODIFIER_COUNTS,
+  ARMOR_MODIFIER_POOLS,
   ACCESSORIES,
   FERTILIZER_RARITY_MULTS,
   CONSUMABLE_RARITY_MULTS,
@@ -1894,6 +1900,7 @@ function drawProjectile(ctx, projectile) {
     return;
   }
   if (projectile.element === "lightning") {
+    ctx.rotate(Math.PI / 2);
     drawAsset(ctx, "effect.lightning", 0, 0, { w: 36, h: 36, label: false, fill: projectile.color });
     ctx.restore();
     return;
@@ -2170,7 +2177,8 @@ function itemSummary(item) {
   if (item.kind === "armor" || item.kind === "accessory") {
     const stats = statLines(item).join(" ");
     const slots = item.slot === "belt" ? ` Pack +${beltSlots(item)}` : "";
-    return `${stats}${slots}`.trim() || item.kind;
+    const mods = item.modifiers?.length ? ` ${item.modifiers.length} mod${item.modifiers.length === 1 ? "" : "s"}` : "";
+    return `${stats}${slots}${mods}`.trim() || item.kind;
   }
   if (item.kind === "fertilizer") return `Tree XP +${item.treeXp || 24}`;
   if (item.kind === "consumable") return consumableUseText(item);
@@ -2182,17 +2190,18 @@ function itemSummary(item) {
 function weaponSummary(item) {
   const stats = statLines(item).join(" ");
   const cls = weaponClass(item);
-  if (item.mode === "melee") return `${cls} ${stats} Cleave ${meleeCleave(item)}`.trim();
+  const mods = item.modifiers?.length ? ` ${item.modifiers.length} mod${item.modifiers.length === 1 ? "" : "s"}` : "";
+  if (item.mode === "melee") return `${cls} ${stats} Cleave ${meleeCleave(item)}${mods}`.trim();
   if (item.mode === "ranged") {
     const pierce = projectilePierce(item);
     const chain = projectileChain(item);
-    return `${cls} ${stats} ${chain ? `Chain ${chain}` : `Pierce ${pierce}`}`.trim();
+    return `${cls} ${stats} ${chain ? `Chain ${chain}` : `Pierce ${pierce}`}${mods}`.trim();
   }
   if (item.mode === "magic") {
     const element = ELEMENTS[magicElement(item)].name;
-    return `${cls} ${stats} ${element}`.trim();
+    return `${cls} ${stats} ${element}${mods}`.trim();
   }
-  return stats || item.kind;
+  return `${stats}${mods}`.trim() || item.kind;
 }
 
 function itemCellStat(item) {
@@ -2253,6 +2262,9 @@ function itemTooltip(item, context = "bag") {
   const stats = statLines(item);
   if (stats.length) lines.push(stats.join(", "));
   if (item.kind === "weapon") lines.push(...weaponTooltipLines(item));
+  if (item.kind !== "weapon" && item.modifiers?.length) {
+    lines.push(...item.modifiers.map((modifier) => `${modifier.name}: ${modifier.text}`));
+  }
   if (item.slot === "belt") lines.push(`Pack slots +${beltSlots(item)}`);
   if (item.kind === "fertilizer") lines.push(`Use at the tree: +${item.treeXp || 24} tree XP.`);
   if (item.kind === "consumable") lines.push(`Use: ${consumableUseText(item)}.`);
@@ -2268,6 +2280,9 @@ function itemTooltip(item, context = "bag") {
 
 function weaponTooltipLines(item) {
   const lines = [`${weaponClass(item)} ${title(item.mode)} attack. Range ${formatNumber(weaponRange(item))}. Speed ${formatNumber(item.speed || 0.5)}s.`];
+  if (item.modifiers?.length) {
+    lines.push(...item.modifiers.map((modifier) => `${modifier.name}: ${modifier.text}`));
+  }
   if (item.mode === "melee") lines.push(`Cleave hits up to ${meleeCleave(item)} enemies inside the swing arc.`);
   if (item.mode === "ranged") {
     const chain = projectileChain(item);
@@ -2546,6 +2561,8 @@ function makeItem(kind, level = 1, boost = 0) {
         [base.stat]: Math.ceil(Math.max(0.2, level * 0.22) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
       };
     }
+    randomizeWeaponBaseStats(item, rarity.name);
+    applyWeaponModifiers(item, base, rarity.name, level);
   }
   if (kind === "armor") {
     const base = pick(ARMORS);
@@ -2559,6 +2576,8 @@ function makeItem(kind, level = 1, boost = 0) {
       defense: Math.ceil((4 + level * 1.6) * rarityMult(ARMOR_RARITY_MULTS, profile, "defense", rarity.name) * trait.defenseMult),
       hp: Math.ceil((5 + level * 3) * rarityMult(ARMOR_RARITY_MULTS, profile, "hp", rarity.name) * trait.hpMult)
     };
+    randomizeArmorBaseStats(item, rarity.name);
+    applyArmorModifiers(item, base, rarity.name, level);
   }
   if (kind === "accessory") {
     const base = pick(ACCESSORIES);
@@ -2600,6 +2619,158 @@ function makeItem(kind, level = 1, boost = 0) {
 
 function itemValue(level, mult = 1) {
   return Math.ceil((10 + level * 7) * mult);
+}
+
+function randomizeWeaponBaseStats(item, rarityName) {
+  randomizeItemBaseStats(item, rarityName, WEAPON_STAT_VARIANCE);
+}
+
+function randomizeArmorBaseStats(item, rarityName) {
+  randomizeItemBaseStats(item, rarityName, ARMOR_STAT_VARIANCE);
+}
+
+function randomizeItemBaseStats(item, rarityName, varianceConfig) {
+  const variance = varianceConfig[rarityName] || varianceConfig.common;
+  item.roll = {};
+  for (const [stat, value] of Object.entries(item.stats || {})) {
+    const mult = rand(variance.min, variance.max);
+    item.roll[stat] = Number(mult.toFixed(3));
+    item.stats[stat] = stat === "crit"
+      ? Number((value * mult).toFixed(3))
+      : Math.max(1, Math.ceil(value * mult));
+  }
+}
+
+function applyWeaponModifiers(item, base, rarityName, level) {
+  const count = rollWeaponModifierCount(rarityName);
+  if (count <= 0) return;
+  const candidates = weaponModifierCandidates(item.mode);
+  const picked = [];
+  const used = new Set();
+  while (picked.length < count && used.size < candidates.length) {
+    const modifier = pickWeighted(candidates.filter((entry) => !used.has(entry.id)));
+    if (!modifier) break;
+    used.add(modifier.id);
+    const rolled = applyItemModifier(item, modifier, rarityName, level);
+    if (rolled) picked.push(rolled);
+  }
+  if (!picked.length) return;
+  item.modifiers = picked;
+  const config = WEAPON_MODIFIER_COUNTS[rarityName] || WEAPON_MODIFIER_COUNTS.common;
+  item.value = Math.ceil(item.value * (config.valueMult + Math.max(0, picked.length - 1) * 0.04));
+}
+
+function rollWeaponModifierCount(rarityName) {
+  const config = WEAPON_MODIFIER_COUNTS[rarityName] || WEAPON_MODIFIER_COUNTS.common;
+  return Math.floor(rand(config.min, config.max + 1));
+}
+
+function weaponModifierCandidates(mode) {
+  return [
+    ...(WEAPON_MODIFIER_POOLS.any || []),
+    ...(WEAPON_MODIFIER_POOLS[mode] || [])
+  ];
+}
+
+function applyArmorModifiers(item, base, rarityName, level) {
+  const count = rollArmorModifierCount(rarityName);
+  if (count <= 0) return;
+  const candidates = armorModifierCandidates(base);
+  const picked = [];
+  const used = new Set();
+  while (picked.length < count && used.size < candidates.length) {
+    const modifier = pickWeighted(candidates.filter((entry) => !used.has(entry.id)));
+    if (!modifier) break;
+    used.add(modifier.id);
+    const rolled = applyItemModifier(item, modifier, rarityName, level);
+    if (rolled) picked.push(rolled);
+  }
+  if (!picked.length) return;
+  item.modifiers = picked;
+  const config = ARMOR_MODIFIER_COUNTS[rarityName] || ARMOR_MODIFIER_COUNTS.common;
+  item.value = Math.ceil(item.value * (config.valueMult + Math.max(0, picked.length - 1) * 0.035));
+}
+
+function rollArmorModifierCount(rarityName) {
+  const config = ARMOR_MODIFIER_COUNTS[rarityName] || ARMOR_MODIFIER_COUNTS.common;
+  return Math.floor(rand(config.min, config.max + 1));
+}
+
+function armorModifierCandidates(base) {
+  return [
+    ...(ARMOR_MODIFIER_POOLS.any || []),
+    ...(ARMOR_MODIFIER_POOLS[base.weight] || []),
+    ...(ARMOR_MODIFIER_POOLS[base.slot] || [])
+  ];
+}
+
+function applyItemModifier(item, modifier, rarityName, level) {
+  const texts = [];
+  for (const effect of modifier.effects || []) {
+    const text = applyItemModifierEffect(item, effect, rarityName, level);
+    if (text) texts.push(text);
+  }
+  if (!texts.length) return null;
+  return { id: modifier.id, name: modifier.name, text: texts.join(", ") };
+}
+
+function applyItemModifierEffect(item, effect, rarityName, level) {
+  if (effect.type === "stat") {
+    const value = rollModifierValue(effect, rarityName, level);
+    item.stats ||= {};
+    item.stats[effect.stat] = effect.stat === "crit"
+      ? Number(((item.stats[effect.stat] || 0) + value).toFixed(3))
+      : Math.ceil((item.stats[effect.stat] || 0) + value);
+    return `${effect.label || statLabel(effect.stat)} ${formatSigned(value, effect.stat)}`;
+  }
+  if (effect.type === "propertyAdd") {
+    const value = rollModifierValue(effect, rarityName, level);
+    item[effect.field] = Number(((item[effect.field] || 0) + value).toFixed(effect.precision ?? 0));
+    return `${effect.label || title(effect.field)} ${formatSigned(value)}`;
+  }
+  if (effect.type === "propertyMult") {
+    const value = rollModifierValue(effect, rarityName, level, { rarityScale: false });
+    item[effect.field] = Number(((item[effect.field] || 0) * value).toFixed(3));
+    const pct = effect.invertPercent ? Math.round((1 - value) * 100) : Math.round((value - 1) * 100);
+    return `${effect.label || title(effect.field)} +${pct}%`;
+  }
+  if (effect.type === "projectileSpecial") {
+    if (item.effect === "chain" || item.chain > 0) {
+      item.chain = (item.chain || 0) + (effect.chain || 1);
+      return `Chain +${effect.chain || 1}`;
+    }
+    item.pierce = (item.pierce || 0) + (effect.pierce || 1);
+    return `Pierce +${effect.pierce || 1}`;
+  }
+  if (effect.type === "elementalBoost") {
+    if (item.element === "fire") {
+      item.splash = Number(((item.splash || 1.15) + effect.fireSplash).toFixed(2));
+      return `Fire splash +${formatNumber(effect.fireSplash)}`;
+    }
+    if (item.element === "ice") {
+      item.chill = Number(((item.chill || 1.5) + effect.iceChill).toFixed(2));
+      return `Ice chill +${formatNumber(effect.iceChill)}s`;
+    }
+    if (item.element === "lightning") {
+      item.chain = (item.chain || 0) + effect.lightningChain;
+      return `Lightning chain +${effect.lightningChain}`;
+    }
+  }
+  if (effect.type === "valueMult") {
+    const value = rollModifierValue(effect, rarityName, level, { rarityScale: false });
+    item.value = Math.ceil(item.value * value);
+    return `${effect.label || "Value"} +${Math.round((value - 1) * 100)}%`;
+  }
+  return "";
+}
+
+function rollModifierValue(effect, rarityName, level, options = {}) {
+  const rarityPower = options.rarityScale === false ? 1 : 1 + rarityRank(rarityName) * 0.14;
+  const min = (effect.min || 0) + (effect.perLevel || 0) * level;
+  const max = (effect.max ?? effect.min ?? 0) + (effect.perLevel || 0) * level;
+  const value = rand(min, max) * rarityPower;
+  if (effect.integer) return Math.max(1, Math.round(value));
+  return Number(value.toFixed(effect.precision ?? (effect.format === "percent" ? 3 : 2)));
 }
 
 function itemBaseName(base) {
