@@ -9,7 +9,9 @@ import {
   AUTOSAVE_MS,
   MAX_PARTICLES,
   MAX_PROJECTILES,
+  SAVE_SLOT_COUNT,
   PLAYER_DEFAULTS,
+  DEFAULT_KEYBINDS,
   HERO_PROGRESSION,
   ORIGIN_STARTS,
   SLOTS,
@@ -65,6 +67,25 @@ import { getGroveInteractions, groveStations, serializeGroveLayout } from "./src
 import { createPlaceholderImageSourceMap, firstImagePreloadIds, imageAssets } from "./src/data/images.js";
 
 const RECIPES = CRAFTING_RECIPES;
+const KEYBIND_ACTIONS = [
+  { id: "moveUp", label: "Move Up" },
+  { id: "moveDown", label: "Move Down" },
+  { id: "moveLeft", label: "Move Left" },
+  { id: "moveRight", label: "Move Right" },
+  { id: "moveUpAlt", label: "Move Up Alt" },
+  { id: "moveDownAlt", label: "Move Down Alt" },
+  { id: "moveLeftAlt", label: "Move Left Alt" },
+  { id: "moveRightAlt", label: "Move Right Alt" },
+  { id: "attack", label: "Attack" },
+  { id: "interact", label: "Interact" },
+  { id: "potion", label: "Potion Slot" },
+  { id: "bag", label: "Bag" },
+  { id: "quests", label: "Quests" },
+  { id: "groveEdit", label: "Grove Edit" },
+  { id: "pause", label: "Pause Menu" }
+];
+const HELD_KEYBIND_ACTIONS = ["moveUp", "moveDown", "moveLeft", "moveRight", "moveUpAlt", "moveDownAlt", "moveLeftAlt", "moveRightAlt", "attack"];
+const INTERACT_POPUP_OVERLAYS = ["tree", "craft", "shop", "portal", "map"];
 
 const runtime = {
   app: document.getElementById("app"),
@@ -82,6 +103,8 @@ const runtime = {
   autosave: 0,
   running: false,
   sellMode: false,
+  bindingAction: null,
+  activeSaveSlot: 1,
   camera: { x: 0, y: 0 },
   shake: 0,
   projectiles: [],
@@ -124,6 +147,7 @@ function installPlaceholderImageSources() {
 const saveSystem = createSaveSystem({
   key: SAVE_KEY,
   getState: () => state,
+  getSlot: () => runtime.activeSaveSlot,
   shouldSkipSave: () => state.mode === "game" && state.settings?.autosave === false,
   onSaved: (raw) => {
     runtime.lastSavedJSON = raw;
@@ -146,13 +170,17 @@ const animationSystem = createTreeAnimationSystem({
 
 installPlaceholderImageSources();
 
+function makeDefaultSettings() {
+  return { autosave: true, screenshake: true, keybinds: { ...DEFAULT_KEYBINDS } };
+}
+
 function makeFreshState() {
   return {
     mode: "menu",
     area: "grove",
     overlay: null,
     message: "The tree stirs. The dungeon below is hungry.",
-    settings: { autosave: true, screenshake: true },
+    settings: makeDefaultSettings(),
     hero: {
       name: PLAYER_DEFAULTS.name,
       origin: PLAYER_DEFAULTS.origin,
@@ -317,9 +345,10 @@ function makeStarterFertilizer(qty = 1) {
   return { id: uid(), kind: "fertilizer", rarity: "common", level: 1, name: base.name, treeXp: base.xp, qty, value: base.value };
 }
 
-function continueGame() {
-  const loaded = loadGame();
+function continueGame(slot = runtime.activeSaveSlot) {
+  const loaded = loadGame(slot);
   if (!loaded) return;
+  runtime.activeSaveSlot = slot;
   state = loaded;
   exposeState();
   state.mode = "game";
@@ -329,6 +358,7 @@ function continueGame() {
 
 function normalizeState() {
   state.overlay = null;
+  state.settings = normalizeSettings(state.settings);
   state.hero.origin ||= PLAYER_DEFAULTS.origin;
   state.player ||= { ...PLAYER_DEFAULTS.startPosition };
   state.player.moveDir ??= state.player.dir || 0;
@@ -365,6 +395,14 @@ function normalizeState() {
     state.dungeon.room.portal = makeFloorPortal(state.dungeon.room.kind);
   }
   if (!state.dungeon?.room && state.area === "dungeon") enterGrove("The roots pull you back to the grove.");
+}
+
+function normalizeSettings(settings = {}) {
+  return {
+    autosave: settings.autosave ?? true,
+    screenshake: settings.screenshake ?? true,
+    keybinds: { ...DEFAULT_KEYBINDS, ...(settings.keybinds || {}) }
+  };
 }
 
 function renderMenu() {
@@ -410,19 +448,6 @@ function mountGame() {
       <div id="overlay" class="overlay-root"></div>
       <div id="toast" class="toast" hidden></div>
       <div id="item-tooltip" class="item-tooltip" hidden></div>
-      <div class="quickbar">
-        <button title="Inventory" onclick="toggleOverlay('inventory')">Bag</button>
-        <button title="Tree" onclick="toggleOverlay('tree')">Tree</button>
-        <button title="Craft" onclick="toggleOverlay('craft')">Craft</button>
-        <button title="Shop" onclick="toggleOverlay('shop')">Shop</button>
-        <button title="Map" onclick="toggleOverlay('map')">Map</button>
-        <button title="Potion" onclick="usePotion()">Potion</button>
-        <button title="Grove layout editor" onclick="toggleGroveEditor()">Grove Edit</button>
-      </div>
-      <div class="touch-actions">
-        <button onclick="playerAttack('keyboard')">Attack</button>
-        <button onclick="interact()">Action</button>
-      </div>
       <section id="grove-editor" class="grove-editor" hidden>
         <header>
           <strong>Grove Editor</strong>
@@ -509,7 +534,7 @@ function bindTooltips() {
 function showItemTooltip(target, event) {
   if (!runtime.tooltip || !target.dataset.tooltip) return;
   runtime.tooltipTarget = target;
-  runtime.tooltip.textContent = target.dataset.tooltip;
+  runtime.tooltip.innerHTML = target.dataset.tooltip;
   runtime.tooltip.hidden = false;
   runtime.tooltip.className = `item-tooltip ${target.dataset.tooltipTone || ""}`;
   positionItemTooltip(event, target);
@@ -540,29 +565,146 @@ function hideItemTooltip() {
   if (runtime.tooltip) runtime.tooltip.hidden = true;
 }
 
+function isTypingTarget(target) {
+  return Boolean(target?.matches?.("input, select, textarea"));
+}
+
+function keybinds() {
+  state.settings = normalizeSettings(state.settings);
+  return state.settings.keybinds;
+}
+
+function keyFor(action) {
+  return keybinds()[action] || "";
+}
+
+function matchesKeybind(action, code) {
+  return Boolean(code && keyFor(action) === code);
+}
+
+function isHeldActionCode(code) {
+  return HELD_KEYBIND_ACTIONS.some((action) => matchesKeybind(action, code));
+}
+
+function isActionDown(action) {
+  const code = keyFor(action);
+  return Boolean(code && runtime.keys.has(code));
+}
+
+function beginKeybindRebind(action) {
+  if (!KEYBIND_ACTIONS.some((entry) => entry.id === action)) return;
+  runtime.bindingAction = action;
+  renderOverlay();
+}
+
+function finishKeybindRebind(action, code) {
+  keybinds()[action] = code;
+  runtime.bindingAction = null;
+  runtime.keys.clear();
+  runtime.lastHudHtml = null;
+  runtime.lastPromptHtml = null;
+  saveGame(runtime.activeSaveSlot, true);
+  renderOverlay();
+}
+
+function resetKeybinds() {
+  state.settings = normalizeSettings({ ...state.settings, keybinds: DEFAULT_KEYBINDS });
+  runtime.bindingAction = null;
+  runtime.keys.clear();
+  runtime.lastHudHtml = null;
+  runtime.lastPromptHtml = null;
+  saveGame(runtime.activeSaveSlot, true);
+  renderOverlay();
+}
+
+function keyLabel(code) {
+  if (!code) return "Unbound";
+  const labels = {
+    Space: "Space",
+    Escape: "Esc",
+    Enter: "Enter",
+    Tab: "Tab",
+    Backspace: "Backspace",
+    ArrowUp: "Up",
+    ArrowDown: "Down",
+    ArrowLeft: "Left",
+    ArrowRight: "Right"
+  };
+  if (labels[code]) return labels[code];
+  if (code.startsWith("Key")) return code.slice(3);
+  if (code.startsWith("Digit")) return code.slice(5);
+  if (code.startsWith("Numpad")) return `Numpad ${code.slice(6)}`;
+  return code.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function togglePauseMenu() {
+  state.overlay = state.overlay === "pause" ? null : "pause";
+  runtime.bindingAction = null;
+  runtime.keys.clear();
+  runtime.mouse.down = false;
+  renderOverlay();
+}
+
+function toggleOverlayShortcut(action, overlay, code) {
+  if (!matchesKeybind(action, code)) return false;
+  if (!state.overlay || state.overlay === overlay) {
+    toggleOverlay(overlay);
+    return true;
+  }
+  return false;
+}
+
+function handlePopupShortcut(code) {
+  if (toggleOverlayShortcut("bag", "inventory", code)) return true;
+  if (toggleOverlayShortcut("quests", "quests", code)) return true;
+  if (matchesKeybind("interact", code) && INTERACT_POPUP_OVERLAYS.includes(state.overlay)) {
+    toggleOverlay(null);
+    return true;
+  }
+  if (matchesKeybind("groveEdit", code) && (!state.overlay || runtime.groveEditor.enabled)) {
+    toggleGroveEditor();
+    return true;
+  }
+  return false;
+}
+
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("keydown", (event) => {
-  if (state.mode !== "game" || event.target.matches("input, select, textarea")) return;
+  if (state.mode !== "game") return;
+  if (runtime.bindingAction) {
+    event.preventDefault();
+    if (!event.repeat) finishKeybindRebind(runtime.bindingAction, event.code);
+    return;
+  }
   const code = event.code;
-  if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"].includes(code)) {
-    runtime.keys.add(code);
+  if (matchesKeybind("pause", code)) {
     event.preventDefault();
+    if (!event.repeat) togglePauseMenu();
+    return;
   }
-  if (code === "Space") {
-    runtime.keys.add(code);
-    event.preventDefault();
-  }
+  if (isTypingTarget(event.target)) return;
   if (event.repeat) return;
-  if (code === "Escape") toggleOverlay(null);
-  if (code === "Space") playerAttack("keyboard");
-  if (code === "KeyE") interact();
-  if (code === "KeyQ") usePotion();
-  if (code === "KeyI") toggleOverlay("inventory");
-  if (code === "KeyT") toggleOverlay("tree");
-  if (code === "KeyC") toggleOverlay("craft");
-  if (code === "KeyB") toggleOverlay("shop");
-  if (code === "KeyO") toggleOverlay("settings");
-  if (code === "KeyR" && state.area === "dungeon") enterGrove("You retreat through the root gate.");
+  if (handlePopupShortcut(code)) {
+    event.preventDefault();
+    return;
+  }
+  if (state.overlay) return;
+  if (isHeldActionCode(code)) {
+    runtime.keys.add(code);
+    event.preventDefault();
+  }
+  if (matchesKeybind("attack", code)) {
+    event.preventDefault();
+    playerAttack("keyboard");
+  }
+  if (matchesKeybind("interact", code)) {
+    event.preventDefault();
+    interact();
+  }
+  if (matchesKeybind("potion", code)) {
+    event.preventDefault();
+    usePotion();
+  }
 });
 window.addEventListener("keyup", (event) => runtime.keys.delete(event.code));
 window.addEventListener("beforeunload", saveGame);
@@ -611,7 +753,7 @@ function update(dt) {
   player.invuln = Math.max(0, player.invuln - dt);
   runtime.shake = Math.max(0, runtime.shake - dt * 18);
   updateMovement(dt, stats);
-  if ((runtime.mouse.down || runtime.keys.has("Space")) && player.attackCd <= 0) playerAttack(runtime.mouse.down ? "mouse" : "keyboard");
+  if ((runtime.mouse.down || isActionDown("attack")) && player.attackCd <= 0) playerAttack(runtime.mouse.down ? "mouse" : "keyboard");
   updateProjectiles(dt);
   if (state.area === "dungeon") updateDungeon(dt, stats);
   updatePickups(dt);
@@ -622,16 +764,16 @@ function update(dt) {
 function updateMovement(dt, stats) {
   let screenX = 0;
   let screenY = 0;
-  if (runtime.keys.has("KeyW") || runtime.keys.has("ArrowUp")) {
+  if (isActionDown("moveUp") || isActionDown("moveUpAlt")) {
     screenY -= 1;
   }
-  if (runtime.keys.has("KeyS") || runtime.keys.has("ArrowDown")) {
+  if (isActionDown("moveDown") || isActionDown("moveDownAlt")) {
     screenY += 1;
   }
-  if (runtime.keys.has("KeyA") || runtime.keys.has("ArrowLeft")) {
+  if (isActionDown("moveLeft") || isActionDown("moveLeftAlt")) {
     screenX -= 1;
   }
-  if (runtime.keys.has("KeyD") || runtime.keys.has("ArrowRight")) {
+  if (isActionDown("moveRight") || isActionDown("moveRightAlt")) {
     screenX += 1;
   }
   if (screenX || screenY) {
@@ -645,7 +787,7 @@ function updateMovement(dt, stats) {
     const nextY = clamp(state.player.y + dy * stats.speed * dt, 1.2, size - 1.2);
     movePlayerWithCollision(nextX, nextY);
     state.player.moveDir = Math.atan2(dy, dx);
-    if (state.player.attackT <= 0 && !runtime.mouse.down && !runtime.keys.has("Space")) {
+    if (state.player.attackT <= 0 && !runtime.mouse.down && !isActionDown("attack")) {
       state.player.dir = state.player.moveDir;
     }
   }
@@ -1478,8 +1620,12 @@ function drawAsset(ctx, key, x, y, options = {}) {
 
 function drawAnimatedAsset(ctx, key, x, y, options = {}) {
   if (!window.TreeHeroAssets?.drawAnimation) return false;
-  window.TreeHeroAssets.drawAnimation(ctx, key, x, y, animationSystem.getTime() * 1000, options);
+  window.TreeHeroAssets.drawAnimation(ctx, key, x, y, gameTimeMs(), options);
   return true;
+}
+
+function gameTimeMs() {
+  return animationSystem.getTime() * 1000;
 }
 
 function drawBackdrop(ctx, width, height) {
@@ -1637,7 +1783,7 @@ function drawChainIndicator(ctx, indicator, pct) {
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(from.x, from.y - 24);
-  const midX = (from.x + to.x) / 2 + Math.sin(performance.now() / 35) * 8;
+  const midX = (from.x + to.x) / 2 + Math.sin(gameTimeMs() / 35) * 8;
   const midY = (from.y + to.y) / 2 - 52;
   ctx.lineTo(midX, midY);
   ctx.lineTo(to.x, to.y - 24);
@@ -1709,7 +1855,7 @@ function drawPortal(ctx, x, y) {
   ctx.lineTo(p.x - 42, p.y + 22);
   ctx.stroke();
   ctx.fillStyle = "rgba(113,169,207,.24)";
-  ellipse(ctx, p.x, p.y - 16, 44 + Math.sin(performance.now() / 250) * 4, 70);
+  ellipse(ctx, p.x, p.y - 16, 44 + Math.sin(gameTimeMs() / 250) * 4, 70);
 }
 
 function drawShop(ctx, x, y) {
@@ -1784,7 +1930,7 @@ function drawGate(ctx, gate) {
   const hue = gate.kind === "elite" || gate.kind === "boss" ? "#c79cf2" : gate.kind === "cache" ? "#d7a84f" : gate.kind === "grove" ? "#77b86b" : "#7fc1ee";
   ctx.strokeStyle = hue;
   ctx.lineWidth = gate.kind === "boss" ? 7 : 5;
-  ctx.globalAlpha = 0.78 + Math.sin(performance.now() / 220) * 0.18;
+  ctx.globalAlpha = 0.78 + Math.sin(gameTimeMs() / 220) * 0.18;
   ctx.beginPath();
   ctx.arc(p.x, p.y - 24, 34, Math.PI, 0);
   ctx.lineTo(p.x + 34, p.y + 22);
@@ -1803,7 +1949,7 @@ function drawGate(ctx, gate) {
 
 function drawFloorPortal(ctx, portal) {
   const p = project(portal.x, portal.y);
-  const pulse = Math.sin(performance.now() / 210);
+  const pulse = Math.sin(gameTimeMs() / 210);
   if (drawAnimatedAsset(ctx, "effect.portal", p.x, p.y - 10, { asset: portal.kind === "grove" ? "portal.return" : "portal.floor", w: 108 + pulse * 4, h: 120 + pulse * 5, label: false })) return;
   const hue = portal.kind === "grove" ? "#77b86b" : "#7fc1ee";
   ctx.save();
@@ -1953,6 +2099,8 @@ function renderHud() {
   const stats = statBlock();
   const xpNeed = xpToLevel(state.hero.level);
   const treeNeed = treeXpToLevel(state.tree.level);
+  const potionKey = keyLabel(keyFor("potion"));
+  const interactKey = keyLabel(keyFor("interact"));
   const hudHtml = `
     <div class="hud-left">
       <strong>${state.hero.name}</strong>
@@ -1964,8 +2112,9 @@ function renderHud() {
     <div class="hud-center">
       <span>${state.area === "dungeon" ? `Depth ${state.dungeon.depth}` : "Rest Grove"}</span>
       <span>${state.hero.gold}g</span>
-      ${state.hero.points ? `<button onclick="toggleOverlay('inventory')">${state.hero.points} stat pts</button>` : ""}
-      ${state.tree.points ? `<button onclick="toggleOverlay('tree')">${state.tree.points} tree pts</button>` : ""}
+      <span class="potion-slot"><b>${escapeHtml(potionKey)}</b> Potion x${potionCount()}</span>
+      ${state.hero.points ? `<span>${state.hero.points} stat pts</span>` : ""}
+      ${state.tree.points ? `<span>${state.tree.points} tree pts</span>` : ""}
     </div>
     <div class="hud-right">${state.message}</div>
   `;
@@ -1974,7 +2123,7 @@ function renderHud() {
     runtime.lastHudHtml = hudHtml;
   }
   const action = nearbyAction();
-  const promptHtml = action ? `<button onclick="interact()">E</button><span>${action.label}</span>` : "";
+  const promptHtml = action ? `<span class="prompt-key">${escapeHtml(interactKey)}</span><span>${escapeHtml(action.label)}</span>` : "";
   if (promptHtml !== runtime.lastPromptHtml) {
     runtime.prompt.innerHTML = promptHtml;
     runtime.lastPromptHtml = promptHtml;
@@ -1991,21 +2140,28 @@ function renderOverlay() {
   hideItemTooltip();
   if (state.overlay !== "inventory") runtime.sellMode = false;
   if (!state.overlay) {
+    runtime.overlay.className = "overlay-root";
     runtime.overlay.innerHTML = "";
     return;
   }
+  runtime.overlay.className = `overlay-root ${state.overlay === "pause" ? "overlay-dim" : ""}`;
   const views = {
+    pause: pauseOverlay,
     inventory: inventoryOverlay,
     tree: treeOverlay,
     craft: craftOverlay,
     shop: shopOverlay,
     map: mapOverlay,
     portal: portalOverlay,
+    quests: questsOverlay,
+    save: saveOverlay,
+    keybinds: keybindOverlay,
     settings: settingsOverlay
   };
+  const closeButton = state.overlay === "pause" ? "" : `<button class="close" onclick="toggleOverlay(null)">Close</button>`;
   runtime.overlay.innerHTML = `
     <section class="overlay-panel ${state.overlay}-panel">
-      <button class="close" onclick="toggleOverlay(null)">Close</button>
+      ${closeButton}
       ${views[state.overlay] ? views[state.overlay]() : ""}
     </section>
   `;
@@ -2161,7 +2317,7 @@ function itemCell(item, overflow = false) {
   const normalAction = item.slot ? `equipItem('${item.id}')` : item.kind === "consumable" ? `useItem('${item.id}')` : "";
   const action = runtime.sellMode ? `sellItem('${item.id}')` : normalAction;
   const tag = itemCellTag(item);
-  const tooltip = `${itemTooltip(item, runtime.sellMode ? "sell" : "bag")}${overflow ? "\nOver pack limit: sell or equip items to restore free slots." : ""}`;
+  const tooltip = `${itemTooltip(item, runtime.sellMode ? "sell" : "bag")}${overflow ? `<div class="tooltip-note">Over pack limit: sell or equip items to restore free slots.</div>` : ""}`;
   return `<div class="item-cell item-filled ${item.kind} rarity-${item.rarity || "common"} ${overflow ? "overflow-cell" : ""} has-tooltip" style="--item-color:${rarityColor(item)}" data-asset="${itemAssetKey(item)}" data-tooltip-tone="${tooltipTone(item)}" data-tooltip="${escapeAttr(tooltip)}">
     <button class="item-use" ${action ? `onclick="${action}"` : ""}>
       <b class="item-icon" style="color:${itemNameColor(item)}">${tag}</b>
@@ -2256,44 +2412,53 @@ function weaponClassTag(item) {
 
 function itemTooltip(item, context = "bag") {
   const lines = [
-    `${item.name}${item.qty > 1 ? ` x${item.qty}` : ""}`,
-    `${title(item.rarity || item.kind)} ${item.kind === "weapon" ? weaponClass(item) : title(item.kind)}${item.level ? ` Lv ${item.level}` : ""}${item.slot ? ` - ${slotLabel(item.slot)}` : ""}`
+    `<div class="tooltip-title">${escapeHtml(item.name)}${item.qty > 1 ? ` x${item.qty}` : ""}</div>`,
+    `<div class="tooltip-subtitle">${escapeHtml(`${title(item.rarity || item.kind)} ${item.kind === "weapon" ? weaponClass(item) : title(item.kind)}${item.level ? ` Lv ${item.level}` : ""}${item.slot ? ` - ${slotLabel(item.slot)}` : ""}`)}</div>`
   ];
   const stats = statLines(item);
-  if (stats.length) lines.push(stats.join(", "));
-  if (item.kind === "weapon") lines.push(...weaponTooltipLines(item));
-  if (item.kind !== "weapon" && item.modifiers?.length) {
-    lines.push(...item.modifiers.map((modifier) => `${modifier.name}: ${modifier.text}`));
+  if (stats.length) lines.push(`<div class="tooltip-base-stats">${escapeHtml(stats.join(", "))}</div>`);
+  if (item.modifiers?.length) {
+    const tone = modifierToneClass(item.modifiers.length);
+    lines.push(...item.modifiers.map((modifier) => `<div class="tooltip-mod ${tone}">${escapeHtml(`${modifier.name}: ${modifier.text}`)}</div>`));
   }
-  if (item.slot === "belt") lines.push(`Pack slots +${beltSlots(item)}`);
-  if (item.kind === "fertilizer") lines.push(`Use at the tree: +${item.treeXp || 24} tree XP.`);
-  if (item.kind === "consumable") lines.push(`Use: ${consumableUseText(item)}.`);
-  if (item.kind === "material") lines.push("Used for crafting weapons, armor, fertilizer, and table upgrades.");
-  if (item.kind === "quest") lines.push("Turn in to the tree when its quest asks for this.");
-  if (context === "sell") lines.push(`Sell mode: click to sell one for ${sellValue(item)}g.`);
-  else if (item.slot && context !== "shop") lines.push(context === "equipped" ? "Equipped. Press X to unequip." : "Click to equip.");
-  else if (item.kind === "consumable") lines.push("Click to use.");
-  if (context === "bag") lines.push("Use the Sell toggle above, then click the item to sell one.");
-  lines.push(`Value ${item.value || 0}g`);
-  return lines.filter(Boolean).join("\n");
+  if (item.kind === "weapon") lines.push(...weaponTooltipLines(item));
+  if (item.slot === "belt") lines.push(tooltipNote(`Pack slots +${beltSlots(item)}`));
+  if (item.kind === "fertilizer") lines.push(tooltipNote(`Use at the tree: +${item.treeXp || 24} tree XP.`));
+  if (item.kind === "consumable") lines.push(tooltipNote(`Use: ${consumableUseText(item)}.`));
+  if (item.kind === "material") lines.push(tooltipNote("Used for crafting weapons, armor, fertilizer, and table upgrades."));
+  if (item.kind === "quest") lines.push(tooltipNote("Turn in to the tree when its quest asks for this."));
+  if (context === "sell") lines.push(tooltipNote(`Sell mode: click to sell one for ${sellValue(item)}g.`));
+  else if (item.slot && context !== "shop") lines.push(tooltipNote(context === "equipped" ? "Equipped. Press X to unequip." : "Click to equip."));
+  else if (item.kind === "consumable") lines.push(tooltipNote("Click to use."));
+  if (context === "bag") lines.push(tooltipNote("Use the Sell toggle above, then click the item to sell one."));
+  lines.push(`<div class="tooltip-value">Value ${item.value || 0}g</div>`);
+  return lines.filter(Boolean).join("");
 }
 
 function weaponTooltipLines(item) {
-  const lines = [`${weaponClass(item)} ${title(item.mode)} attack. Range ${formatNumber(weaponRange(item))}. Speed ${formatNumber(item.speed || 0.5)}s.`];
-  if (item.modifiers?.length) {
-    lines.push(...item.modifiers.map((modifier) => `${modifier.name}: ${modifier.text}`));
-  }
-  if (item.mode === "melee") lines.push(`Cleave hits up to ${meleeCleave(item)} enemies inside the swing arc.`);
+  const lines = [tooltipNote(`${weaponClass(item)} ${title(item.mode)} attack. Range ${formatNumber(weaponRange(item))}. Speed ${formatNumber(item.speed || 0.5)}s.`)];
+  if (item.mode === "melee") lines.push(tooltipNote(`Cleave hits up to ${meleeCleave(item)} enemies inside the swing arc.`));
   if (item.mode === "ranged") {
     const chain = projectileChain(item);
-    if (chain) lines.push(`Shots chain to ${chain} nearby target${chain === 1 ? "" : "s"} after impact.`);
-    else lines.push(`Shots pierce ${projectilePierce(item)} additional target${projectilePierce(item) === 1 ? "" : "s"}.`);
+    if (chain) lines.push(tooltipNote(`Shots chain to ${chain} nearby target${chain === 1 ? "" : "s"} after impact.`));
+    else lines.push(tooltipNote(`Shots pierce ${projectilePierce(item)} additional target${projectilePierce(item) === 1 ? "" : "s"}.`));
   }
   if (item.mode === "magic") {
     const element = ELEMENTS[magicElement(item)];
-    lines.push(`${element.name}: ${element.text}`);
+    lines.push(tooltipNote(`${element.name}: ${element.text}`));
   }
   return lines;
+}
+
+function tooltipNote(text) {
+  return `<div class="tooltip-note">${escapeHtml(text)}</div>`;
+}
+
+function modifierToneClass(count) {
+  if (count >= 4) return "mod-epic";
+  if (count === 3) return "mod-rare";
+  if (count === 2) return "mod-blue";
+  return "mod-green";
 }
 
 function statLines(item) {
@@ -2365,17 +2530,7 @@ function treeOverlay() {
     `;
   }).join("");
   const fertilizer = state.hero.inventory.filter((item) => item.kind === "fertilizer");
-  const quests = visibleQuests().map((quest) => {
-    const progress = questProgress(quest.id);
-    const have = quest.need.kind ? countKind(quest.need.kind) : countItem(quest.need.name);
-    return `
-      <div class="quest-line ${quest.origin ? "origin-quest" : ""}">
-        <b>${quest.title}</b><span>${progress.done ? "done" : `${have}/${quest.need.qty}`}</span>
-        <button ${!progress.done && have >= quest.need.qty ? "" : "disabled"} onclick="completeQuest('${quest.id}')">Turn In</button>
-        <small>${escapeHtml(quest.text || questNeedLabel(quest))}</small>
-      </div>
-    `;
-  }).join("");
+  const quests = questListHtml();
   return `
     <h2>Tree of Vows</h2>
     <div class="tree-screen">
@@ -2401,6 +2556,20 @@ function treeOverlay() {
       </div>
     </div>
   `;
+}
+
+function questListHtml() {
+  return visibleQuests().map((quest) => {
+    const progress = questProgress(quest.id);
+    const have = quest.need.kind ? countKind(quest.need.kind) : countItem(quest.need.name);
+    return `
+      <div class="quest-line ${quest.origin ? "origin-quest" : ""}">
+        <b>${escapeHtml(quest.title)}</b><span>${progress.done ? "done" : `${have}/${quest.need.qty}`}</span>
+        <button ${!progress.done && have >= quest.need.qty ? "" : "disabled"} onclick="completeQuest('${quest.id}')">Turn In</button>
+        <small>${escapeHtml(quest.text || questNeedLabel(quest))}</small>
+      </div>
+    `;
+  }).join("");
 }
 
 function visibleQuests() {
@@ -2475,21 +2644,88 @@ function shopOverlay() {
   return `<h2>Grove Keeper</h2><button onclick="refreshShop(); renderOverlay()">Refresh Wares</button><div class="item-list">${stock}</div>`;
 }
 
+function pauseOverlay() {
+  const dungeonActions = state.area === "dungeon"
+    ? `<button onclick="returnToGroveFromPause()">Return to Grove</button>`
+    : "";
+  return `
+    <h2>Paused</h2>
+    <div class="pause-menu">
+      <button class="gold" onclick="toggleOverlay(null)">Resume</button>
+      <button onclick="toggleOverlay('save')">Save / Load</button>
+      <button onclick="toggleOverlay('quests')">Quests</button>
+      <button onclick="toggleOverlay('keybinds')">Keybinds</button>
+      <button onclick="toggleOverlay('settings')">Settings</button>
+      ${dungeonActions}
+      <button onclick="exitToMenu()">Exit</button>
+    </div>
+  `;
+}
+
+function questsOverlay() {
+  return `
+    <h2>Quest Log</h2>
+    <div class="quest-list">${questListHtml()}</div>
+  `;
+}
+
+function saveOverlay() {
+  const slots = saveSystem.listSlots(SAVE_SLOT_COUNT).map(({ slot, exists, summary }) => {
+    const active = slot === runtime.activeSaveSlot ? " active" : "";
+    const details = exists
+      ? `${escapeHtml(summary.hero)} Lv ${summary.level} - Tree ${summary.treeLevel} - ${escapeHtml(summary.area)}${summary.depth ? ` - best depth ${summary.depth}` : ""}`
+      : "Empty slot";
+    return `<div class="save-slot${active}">
+      <div><b>Slot ${slot}</b><span>${details}</span></div>
+      <button onclick="saveToSlot(${slot})">Save</button>
+      <button ${exists ? "" : "disabled"} onclick="loadFromSlot(${slot})">Load</button>
+      <button ${exists ? "" : "disabled"} onclick="deleteSaveSlot(${slot})">Delete</button>
+    </div>`;
+  }).join("");
+  return `
+    <h2>Save / Load</h2>
+    <div class="save-slots">${slots}</div>
+    <div class="menu-actions">
+      <button onclick="saveToSlot(${runtime.activeSaveSlot})">Save Current Slot</button>
+      <button onclick="toggleOverlay('pause')">Back</button>
+    </div>
+  `;
+}
+
+function keybindOverlay() {
+  const rows = KEYBIND_ACTIONS.map((action) => {
+    const waiting = runtime.bindingAction === action.id;
+    return `<div class="keybind-row ${waiting ? "waiting" : ""}">
+      <span>${escapeHtml(action.label)}</span>
+      <button onclick="beginKeybindRebind('${action.id}')">${waiting ? "Press key" : escapeHtml(keyLabel(keyFor(action.id)))}</button>
+    </div>`;
+  }).join("");
+  return `
+    <h2>Keybinds</h2>
+    <div class="keybind-list">${rows}</div>
+    <div class="menu-actions">
+      <button onclick="resetKeybinds()">Reset Defaults</button>
+      <button onclick="toggleOverlay('pause')">Back</button>
+    </div>
+  `;
+}
+
 function settingsOverlay() {
   return `
     <h2>Settings</h2>
-    <label class="check"><input type="checkbox" ${state.settings.autosave ? "checked" : ""} onchange="state.settings.autosave=this.checked; saveGame()"> Autosave</label>
-    <label class="check"><input type="checkbox" ${state.settings.screenshake ? "checked" : ""} onchange="state.settings.screenshake=this.checked; saveGame()"> Screenshake</label>
+    <label class="check"><input type="checkbox" ${state.settings.autosave ? "checked" : ""} onchange="state.settings.autosave=this.checked; saveGame(${runtime.activeSaveSlot}, true)"> Autosave</label>
+    <label class="check"><input type="checkbox" ${state.settings.screenshake ? "checked" : ""} onchange="state.settings.screenshake=this.checked; saveGame(${runtime.activeSaveSlot}, true)"> Screenshake</label>
     <div class="menu-actions">
-      <button onclick="saveGame(); toast('Saved')">Save</button>
-      <button onclick="state.mode='menu'; saveGame(); renderMenu()">Main Menu</button>
-      <button onclick="deleteSave()">Delete Save</button>
+      <button onclick="toggleOverlay('pause')">Back</button>
     </div>
   `;
 }
 
 function toggleOverlay(name) {
+  runtime.bindingAction = null;
   state.overlay = state.overlay === name ? null : name;
+  runtime.keys.clear();
+  runtime.mouse.down = false;
   renderOverlay();
 }
 
@@ -2854,6 +3090,10 @@ function countItem(name) {
   return state.hero.inventory.filter((item) => item.name === name).reduce((sum, item) => sum + (item.qty || 1), 0);
 }
 
+function potionCount() {
+  return countItem("Recovery Potion");
+}
+
 function countKind(kind) {
   return state.hero.inventory.filter((item) => item.kind === kind).reduce((sum, item) => sum + (item.qty || 1), 0);
 }
@@ -3133,16 +3373,81 @@ function maybeAutosave(dt) {
   }
 }
 
-function saveGame() {
-  saveSystem.save();
+function saveGame(slot = runtime.activeSaveSlot, force = false) {
+  if (!Number.isInteger(slot)) slot = runtime.activeSaveSlot;
+  runtime.activeSaveSlot = slot;
+  return saveSystem.save(slot, { force });
 }
 
-function loadGame() {
-  return saveSystem.load();
+function loadGame(slot = runtime.activeSaveSlot) {
+  return saveSystem.load(slot);
+}
+
+function saveToSlot(slot) {
+  const saved = saveGame(slot, true);
+  toast(saved ? `Saved slot ${slot}` : "Save failed.");
+  renderOverlay();
+}
+
+function exitToMenu() {
+  runtime.bindingAction = null;
+  runtime.keys.clear();
+  runtime.mouse.down = false;
+  state.overlay = null;
+  saveGame(runtime.activeSaveSlot, true);
+  state.mode = "menu";
+  renderMenu();
+}
+
+function returnToGroveFromPause() {
+  if (state.area !== "dungeon") {
+    toggleOverlay(null);
+    return;
+  }
+  state.dungeon.map = null;
+  state.dungeon.currentNode = null;
+  state.dungeon.runComplete = false;
+  enterGrove("You retreat through the roots to the grove.");
+  saveGame();
+}
+
+function loadFromSlot(slot) {
+  const loaded = loadGame(slot);
+  if (!loaded) {
+    toast(`Slot ${slot} is empty.`);
+    return;
+  }
+  runtime.activeSaveSlot = slot;
+  state = loaded;
+  exposeState();
+  state.mode = "game";
+  normalizeState();
+  mountGame();
+  toast(`Loaded slot ${slot}`);
+}
+
+function deleteSaveSlot(slot) {
+  saveSystem.remove(slot);
+  if (slot === runtime.activeSaveSlot) {
+    runtime.activeSaveSlot = nextSaveSlotAfterDelete(slot);
+    try {
+      runtime.lastSavedJSON = JSON.stringify(state);
+    } catch {
+      runtime.lastSavedJSON = null;
+    }
+  }
+  toast(`Deleted slot ${slot}`);
+  renderOverlay();
+}
+
+function nextSaveSlotAfterDelete(deletedSlot) {
+  const existing = saveSystem.listSlots(SAVE_SLOT_COUNT).find((entry) => entry.exists && entry.slot !== deletedSlot);
+  if (existing) return existing.slot;
+  return deletedSlot === 1 && SAVE_SLOT_COUNT > 1 ? 2 : 1;
 }
 
 function deleteSave() {
-  saveSystem.remove();
+  saveSystem.remove(runtime.activeSaveSlot);
   state = makeFreshState();
   exposeState();
   renderMenu();
@@ -3212,6 +3517,10 @@ Object.assign(window, {
   deleteSave,
   toggleOverlay,
   toggleGroveEditor,
+  beginKeybindRebind,
+  resetKeybinds,
+  exitToMenu,
+  returnToGroveFromPause,
   interact,
   playerAttack,
   usePotion,
@@ -3221,6 +3530,9 @@ Object.assign(window, {
   sellItem,
   sortInventory,
   toggleSellMode,
+  saveToSlot,
+  loadFromSlot,
+  deleteSaveSlot,
   buyItem,
   refreshShop,
   diveDeeperFromPortal,

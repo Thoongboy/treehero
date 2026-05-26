@@ -12,6 +12,24 @@ export const PLAYER_DEFAULTS = {
   startPosition: { x: 8.5, y: 11.5, dir: 0, moveDir: 0, attackCd: 0, attackT: 0, invuln: 0 }
 };
 
+export const DEFAULT_KEYBINDS = {
+  moveUp: "KeyW",
+  moveDown: "KeyS",
+  moveLeft: "KeyA",
+  moveRight: "KeyD",
+  moveUpAlt: "ArrowUp",
+  moveDownAlt: "ArrowDown",
+  moveLeftAlt: "ArrowLeft",
+  moveRightAlt: "ArrowRight",
+  attack: "Space",
+  interact: "KeyE",
+  potion: "Digit1",
+  bag: "KeyB",
+  quests: "KeyL",
+  groveEdit: "KeyP",
+  pause: "Escape"
+};
+
 export const SLOTS = ["weapon", "offhand", "helm", "armor", "boots", "gloves", "ring", "amulet", "belt"];
 
 export const HERO_PROGRESSION = {

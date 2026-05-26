@@ -8,3 +8,4 @@ export const GROVE_SIZE = 12;
 export const AUTOSAVE_MS = 5000;
 export const MAX_PARTICLES = 300;
 export const MAX_PROJECTILES = 80;
+export const SAVE_SLOT_COUNT = 3;

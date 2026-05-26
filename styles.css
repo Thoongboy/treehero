@@ -235,8 +235,6 @@ select {
 .hud-center,
 .hud-right,
 .prompt,
-.quickbar,
-.touch-actions,
 .overlay-panel,
 .toast {
   border: 1px solid var(--line);
@@ -325,6 +323,24 @@ select {
   pointer-events: auto;
 }
 
+.potion-slot {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.potion-slot b,
+.prompt-key {
+  min-width: 32px;
+  padding: 4px 8px;
+  border: 2px solid #5a3724;
+  background: #c8913e;
+  color: #24150c;
+  text-align: center;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 1px rgba(255, 232, 179, 0.28);
+}
+
 .hud-right {
   color: var(--muted);
   line-height: 1.35;
@@ -333,7 +349,7 @@ select {
 .prompt {
   position: absolute;
   left: 50%;
-  bottom: 96px;
+  bottom: 24px;
   transform: translateX(-50%);
   display: flex;
   gap: 10px;
@@ -345,34 +361,6 @@ select {
 
 .prompt:empty {
   display: none;
-}
-
-.prompt button {
-  min-width: 42px;
-  font-weight: 800;
-  background: rgba(144, 104, 43, 0.95);
-}
-
-.quickbar {
-  position: absolute;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 8px;
-}
-
-.touch-actions {
-  position: absolute;
-  right: 16px;
-  bottom: 18px;
-  display: none;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 8px;
 }
 
 .grove-editor {
@@ -425,6 +413,11 @@ select {
 
 .overlay-root:empty {
   display: none;
+}
+
+.overlay-root.overlay-dim {
+  background: rgba(0, 0, 0, 0.58);
+  pointer-events: auto;
 }
 
 .overlay-panel {
@@ -585,21 +578,8 @@ select {
     display: none;
   }
 
-  .quickbar {
-    left: 12px;
-    right: 12px;
-    transform: none;
-    justify-content: center;
-  }
-
-  .touch-actions {
-    display: flex;
-    right: 12px;
-    bottom: 78px;
-  }
-
   .prompt {
-    bottom: 142px;
+    bottom: 24px;
   }
 
   .item-row,
@@ -667,8 +647,6 @@ select {
 .hud-center,
 .hud-right,
 .prompt,
-.quickbar,
-.touch-actions,
 .toast {
   border: 3px solid var(--burn);
   border-radius: 0;
@@ -707,13 +685,16 @@ select {
   background: #3a2718;
 }
 
-.prompt button,
-.quickbar button {
+.prompt-key {
   background: #c8913e;
 }
 
 .overlay-panel {
   width: min(1120px, calc(100vw - 32px));
+}
+
+.pause-panel {
+  width: min(360px, calc(100vw - 32px));
 }
 
 .overlay-panel h3 {
@@ -1052,7 +1033,7 @@ select {
   color: #24150c;
   font: 700 12px/1.35 Georgia, "Times New Roman", serif;
   pointer-events: none;
-  white-space: pre-line;
+  white-space: normal;
 }
 
 .item-tooltip[hidden] {
@@ -1065,6 +1046,43 @@ select {
 .item-tooltip.tooltip-quest { border-color: #7a2f90; }
 .item-tooltip.tooltip-consumable { border-color: #a7452f; }
 
+.tooltip-title,
+.tooltip-subtitle {
+  color: #24150c;
+  font-weight: 900;
+  line-height: 1.12;
+}
+
+.tooltip-title {
+  font-size: 14px;
+}
+
+.tooltip-subtitle {
+  margin-bottom: 3px;
+  font-size: 13px;
+}
+
+.tooltip-base-stats {
+  color: #24150c;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tooltip-mod {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tooltip-mod.mod-green { color: #2f7d35; }
+.tooltip-mod.mod-blue { color: #1f5f96; }
+.tooltip-mod.mod-rare { color: #6f348a; }
+.tooltip-mod.mod-epic { color: #b17416; }
+
+.tooltip-note,
+.tooltip-value {
+  color: #24150c;
+}
+
 .craft-screen {
   display: grid;
   grid-template-columns: minmax(360px, 1fr) auto;
@@ -1074,6 +1092,69 @@ select {
 .recipe-list {
   display: grid;
   gap: 10px;
+}
+
+.save-slots {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.save-slot {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 3px solid #5f3d27;
+  background: rgba(238, 215, 170, 0.78);
+  color: #24150c;
+}
+
+.save-slot.active {
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 2px rgba(215, 168, 79, 0.35);
+}
+
+.save-slot b,
+.save-slot span {
+  display: block;
+  color: #24150c;
+}
+
+.save-slot span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pause-menu,
+.keybind-list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.pause-menu {
+  grid-template-columns: 1fr;
+}
+
+.keybind-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 150px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 3px solid #5f3d27;
+  background: rgba(238, 215, 170, 0.78);
+  color: #24150c;
+}
+
+.keybind-row span {
+  font-weight: 900;
+}
+
+.keybind-row.waiting {
+  border-color: var(--gold);
 }
 
 .recipe-card {
@@ -1241,6 +1322,11 @@ select {
 
   .minecraft-grid {
     grid-template-columns: repeat(5, 48px);
+  }
+
+  .save-slot,
+  .keybind-row {
+    grid-template-columns: 1fr;
   }
 }
 
