@@ -1,15 +1,39 @@
 "use strict";
 
 export const WEAPONS = [
-  { type: "Sword", class: "Sword", slot: "weapon", range: 1.62, speed: 0.42, stat: "str", mode: "melee", arc: 0.9, dropWeight: 16, rarityProfile: "balanced" },
-  { type: "Bow", class: "Bow", slot: "weapon", range: 7.2, speed: 0.58, stat: "dex", mode: "ranged", projectile: "arrow", projectileSpeed: 9.5, color: "#d8b56d", size: 7, dropWeight: 12, rarityProfile: "ranged" },
-  { type: "Shield", class: "Shield", slot: "offhand", range: 1, speed: 0.52, stat: "vit", mode: "guard", dropWeight: 10, rarityProfile: "shield" },
-  { type: "Two-Handed Sword", class: "Greatsword", slot: "weapon", range: 2.06, speed: 0.72, stat: "str", mode: "melee", arc: 1.15, dropWeight: 8, rarityProfile: "heavy" },
-  { type: "Axe", class: "Axe", slot: "weapon", range: 1.78, speed: 0.68, stat: "str", mode: "melee", arc: 1.0, dropWeight: 10, rarityProfile: "heavy" },
-  { type: "Spear", class: "Spear", slot: "weapon", range: 2.7, speed: 0.54, stat: "dex", mode: "melee", arc: 0.42, dropWeight: 12, rarityProfile: "reach" },
-  { type: "Crossbow", class: "Crossbow", slot: "weapon", range: 8.2, speed: 0.86, stat: "dex", mode: "ranged", projectile: "bolt", projectileSpeed: 12.5, color: "#f0d9a2", size: 8, dropWeight: 8, rarityProfile: "heavyRanged" },
-  { type: "Magic Staff", class: "Staff", slot: "weapon", range: 6.8, speed: 0.66, stat: "int", mode: "magic", projectile: "orb", projectileSpeed: 7.8, color: "#8fd9ff", size: 12, pierce: 1, dropWeight: 7, rarityProfile: "staff" },
-  { type: "Wand", class: "Wand", slot: "weapon", range: 5.7, speed: 0.34, stat: "int", mode: "magic", projectile: "spark", projectileSpeed: 10.8, color: "#c79cf2", size: 8, dropWeight: 9, rarityProfile: "wand" }
+  { type: "Sword", class: "Sword", slot: "weapon",
+    range: 1.62, attackSpeed: 0.42, stat: "str", mode: "melee", arc: 0.9, dropWeight: 16, rarityProfile: "balanced" 
+  },
+  { type: "Bow", class: "Bow", slot: "weapon",
+    range: 7.2, attackSpeed: 0.58, stat: "dex", mode: "ranged", projectile: "arrow", projectileSpeed: 9.5, color: "#d8b56d", size: 7, dropWeight: 12, rarityProfile: "ranged" 
+  },
+  { type: "Shield", class: "Shield", slot: "offhand",
+    range: 1, attackSpeed: 0.52, stat: "vit", mode: "guard", dropWeight: 10, rarityProfile: "shield" 
+  },
+  { type: "Tome", class: "Tome", slot: "offhand",
+    stat: "int", mode: "tome", dropWeight: 7, rarityProfile: "tome", compatibleWeapons: ["Wand"]
+  },
+  { type: "Quiver", class: "Quiver", slot: "offhand",
+    stat: "dex", mode: "quiver", dropWeight: 7, rarityProfile: "quiver", compatibleWeapons: ["Bow", "Crossbow"]
+  },
+  { type: "Two-Handed Sword", class: "Greatsword", slot: "weapon",
+    range: 2.18, attackSpeed: 0.7, stat: "str", mode: "melee", arc: 1.18, dropWeight: 8, rarityProfile: "heavy", hands: 2, attackMult: 1.35, statMult: 1.25
+  },
+  { type: "Axe", class: "Axe", slot: "weapon",
+    range: 1.78, attackSpeed: 0.68, stat: "str", mode: "melee", arc: 1.0, dropWeight: 10, rarityProfile: "heavy" 
+  },
+  { type: "Spear", class: "Spear", slot: "weapon", 
+    range: 2.7, attackSpeed: 0.54, stat: "dex", mode: "melee", arc: 0.42, dropWeight: 12, rarityProfile: "reach" 
+  },
+  { type: "Crossbow", class: "Crossbow", slot: "weapon", 
+    range: 8.2, attackSpeed: 0.86, stat: "dex", mode: "ranged", projectile: "bolt", projectileSpeed: 12.5, color: "#f0d9a2", size: 8, dropWeight: 8, rarityProfile: "heavyRanged" 
+  },
+  { type: "Magic Staff", class: "Staff", slot: "weapon", 
+    range: 7.2, attackSpeed: 0.62, stat: "int", mode: "magic", projectile: "orb", projectileSpeed: 8.4, color: "#8fd9ff", size: 14, pierce: 1, dropWeight: 7, rarityProfile: "staff", hands: 2, attackMult: 1.55, statMult: 1.35
+  },
+  { type: "Wand", class: "Wand", slot: "weapon", 
+    range: 5.7, attackSpeed: 0.34, stat: "int", mode: "magic", projectile: "spark", projectileSpeed: 10.8, color: "#c79cf2", size: 8, dropWeight: 9, rarityProfile: "wand" 
+  }
 ];
 
 export const WEAPON_RARITY_MULTS = {
@@ -52,6 +76,16 @@ export const WEAPON_RARITY_MULTS = {
     value: { common: 1, uncommon: 1.3, rare: 1.78, epic: 2.42 },
     defense: { common: 1, uncommon: 1.32, rare: 1.76, epic: 2.35 },
     hp: { common: 1, uncommon: 1.28, rare: 1.68, epic: 2.2 }
+  },
+  tome: {
+    value: { common: 1, uncommon: 1.34, rare: 1.9, epic: 2.68 },
+    attack: { common: 1, uncommon: 1.26, rare: 1.66, epic: 2.2 },
+    stat: { common: 1, uncommon: 1.22, rare: 1.58, epic: 2.05 }
+  },
+  quiver: {
+    value: { common: 1, uncommon: 1.34, rare: 1.9, epic: 2.68 },
+    attack: { common: 1, uncommon: 1.24, rare: 1.62, epic: 2.12 },
+    stat: { common: 1, uncommon: 1.2, rare: 1.52, epic: 1.98 }
   }
 };
 

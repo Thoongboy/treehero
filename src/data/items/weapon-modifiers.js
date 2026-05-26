@@ -26,7 +26,7 @@ export const WEAPON_MODIFIER_POOLS = {
       id: "balanced_weight",
       name: "Balanced Weight",
       weight: 6,
-      effects: [{ type: "propertyMult", field: "speed", min: 0.91, max: 0.97, label: "Faster attacks", invertPercent: true }]
+      effects: [{ type: "propertyMult", field: "attackSpeed", min: 0.91, max: 0.97, label: "Faster attacks", invertPercent: true }]
     },
     {
       id: "seasoned_core",
@@ -64,7 +64,7 @@ export const WEAPON_MODIFIER_POOLS = {
       id: "quick_cut",
       name: "Quick Cut",
       weight: 6,
-      effects: [{ type: "propertyMult", field: "speed", min: 0.86, max: 0.94, label: "Faster attacks", invertPercent: true }]
+      effects: [{ type: "propertyMult", field: "attackSpeed", min: 0.86, max: 0.94, label: "Faster attacks", invertPercent: true }]
     }
   ],
   ranged: [
@@ -122,13 +122,65 @@ export const WEAPON_MODIFIER_POOLS = {
       id: "quick_cast",
       name: "Quick Cast",
       weight: 6,
-      effects: [{ type: "propertyMult", field: "speed", min: 0.88, max: 0.95, label: "Faster casts", invertPercent: true }]
+      effects: [{ type: "propertyMult", field: "attackSpeed", min: 0.88, max: 0.95, label: "Faster casts", invertPercent: true }]
     },
     {
       id: "volatile_spell",
       name: "Volatile Spell",
       weight: 5,
       effects: [{ type: "elementalBoost", fireSplash: 0.24, iceChill: 0.35, lightningChain: 1, label: "Element boost" }]
+    }
+  ],
+  tome: [
+    {
+      id: "split_glyph",
+      name: "Split Glyph",
+      weight: 8,
+      effects: [{ type: "propertyAdd", field: "projectileCount", min: 1, max: 1, integer: true, label: "Spell projectile" }]
+    },
+    {
+      id: "seeking_script",
+      name: "Seeking Script",
+      weight: 7,
+      effects: [{ type: "propertyAdd", field: "homing", min: 0.32, max: 0.58, precision: 2, label: "Spell homing" }]
+    },
+    {
+      id: "burst_margin",
+      name: "Burst Margin",
+      weight: 7,
+      effects: [{ type: "propertyAdd", field: "aoe", min: 0.55, max: 1.05, precision: 2, label: "Spell AoE" }]
+    },
+    {
+      id: "storm_notation",
+      name: "Storm Notation",
+      weight: 5,
+      effects: [{ type: "propertyAdd", field: "chain", min: 1, max: 1, integer: true, label: "Spell chain" }]
+    }
+  ],
+  quiver: [
+    {
+      id: "swift_fletching",
+      name: "Swift Fletching",
+      weight: 8,
+      effects: [{ type: "propertyAdd", field: "projectileSpeed", min: 0.9, max: 2.2, precision: 1, label: "Projectile speed" }]
+    },
+    {
+      id: "split_arrows",
+      name: "Split Arrows",
+      weight: 7,
+      effects: [{ type: "propertyAdd", field: "projectileCount", min: 1, max: 1, integer: true, label: "Projectile" }]
+    },
+    {
+      id: "forked_heads",
+      name: "Forked Heads",
+      weight: 6,
+      effects: [{ type: "propertyAdd", field: "forks", min: 1, max: 2, integer: true, label: "Forks" }]
+    },
+    {
+      id: "bodkin_bundle",
+      name: "Bodkin Bundle",
+      weight: 7,
+      effects: [{ type: "propertyAdd", field: "pierce", min: 1, max: 2, integer: true, label: "Pierce" }]
     }
   ],
   guard: [

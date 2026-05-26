@@ -19,6 +19,8 @@ Drop PNG files at these paths. If a file is missing, the game keeps drawing the 
 | `item.weapon.staff` | `src/assets/items/weapons/staff.png` |
 | `item.weapon.wand` | `src/assets/items/weapons/wand.png` |
 | `item.weapon.shield` | `src/assets/items/weapons/shield.png` |
+| `item.weapon.tome` | `src/assets/items/weapons/tome.png` |
+| `item.weapon.quiver` | `src/assets/items/weapons/quiver.png` |
 | `item.armor` | `src/assets/items/armor.png` |
 | `item.accessory` | `src/assets/items/accessory.png` |
 | `item.material` | `src/assets/items/material.png` |

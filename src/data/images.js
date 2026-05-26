@@ -31,6 +31,8 @@ export const placeholderImagePaths = {
   "item.weapon.staff": assetPath("items/weapons/staff.png"),
   "item.weapon.wand": assetPath("items/weapons/wand.png"),
   "item.weapon.shield": assetPath("items/weapons/shield.png"),
+  "item.weapon.tome": assetPath("items/weapons/tome.png"),
+  "item.weapon.quiver": assetPath("items/weapons/quiver.png"),
   "item.armor": assetPath("items/armor.png"),
   "item.accessory": assetPath("items/accessory.png"),
   "item.material": assetPath("items/material.png"),

@@ -17,6 +17,8 @@
     "item.weapon.staff": { label: "Magic staff icon", category: "item.weapon", shape: "staff", fill: "#8fd9ff", stroke: "#24150c", glyph: "STF" },
     "item.weapon.wand": { label: "Wand icon", category: "item.weapon", shape: "wand", fill: "#f4d86a", stroke: "#24150c", glyph: "WND" },
     "item.weapon.shield": { label: "Shield icon", category: "item.weapon", shape: "shield", fill: "#9d8b6d", stroke: "#24150c", glyph: "SHD" },
+    "item.weapon.tome": { label: "Tome icon", category: "item.weapon", shape: "rune", fill: "#8fd9ff", stroke: "#24150c", glyph: "TOM" },
+    "item.weapon.quiver": { label: "Quiver icon", category: "item.weapon", shape: "bow", fill: "#d8b56d", stroke: "#24150c", glyph: "QVR" },
     "item.armor": { label: "Armor icon", category: "item.armor", shape: "shield", fill: "#8f988f", stroke: "#24150c", glyph: "ARM" },
     "item.accessory": { label: "Accessory icon", category: "item.accessory", shape: "ring", fill: "#d7a84f", stroke: "#24150c", glyph: "ACC" },
     "item.material": { label: "Crafting material icon", category: "item.material", shape: "rock", fill: "#b68955", stroke: "#24150c", glyph: "MAT" },

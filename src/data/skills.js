@@ -14,6 +14,6 @@ export const POWER_RATING_WEIGHTS = {
   defense: 1.25,
   maxHp: 0.26,
   crit: 120,
-  speed: 18,
+  moveSpeed: 18,
   loot: 22
 };

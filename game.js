@@ -260,7 +260,9 @@ function makeStarterWeapon(type, options = {}) {
     name: options.name || base.type,
     slot: base.slot,
     range: base.range,
-    speed: base.speed,
+    attackSpeed: options.attackSpeed ?? options.speed ?? base.attackSpeed ?? base.speed,
+    hands: options.hands ?? base.hands ?? 1,
+    compatibleWeapons: options.compatibleWeapons || base.compatibleWeapons,
     mode: base.mode,
     arc: base.arc,
     projectile: base.projectile,
@@ -268,6 +270,10 @@ function makeStarterWeapon(type, options = {}) {
     color: base.color,
     size: base.size,
     pierce: options.pierce ?? base.pierce ?? 0,
+    projectileCount: options.projectileCount ?? base.projectileCount ?? 0,
+    forks: options.forks ?? base.forks ?? 0,
+    homing: options.homing ?? base.homing ?? 0,
+    aoe: options.aoe ?? base.aoe ?? 0,
     stats: options.stats || { attack: 7, [base.stat]: 1 }
   };
   if (base.mode === "melee") item.cleave = options.cleave || (base.type === "Spear" ? 2 : 2);
@@ -360,6 +366,9 @@ function normalizeState() {
   state.overlay = null;
   state.settings = normalizeSettings(state.settings);
   state.hero.origin ||= PLAYER_DEFAULTS.origin;
+  state.hero.inventory ||= [];
+  state.hero.equipment ||= Object.fromEntries(SLOTS.map((slot) => [slot, null]));
+  for (const slot of SLOTS) state.hero.equipment[slot] ??= null;
   state.player ||= { ...PLAYER_DEFAULTS.startPosition };
   state.player.moveDir ??= state.player.dir || 0;
   const mapSize = state.area === "grove" ? GROVE_SIZE : MAP_SIZE;
@@ -380,6 +389,7 @@ function normalizeState() {
   state.upgrades.craft ??= 1;
   state.upgrades.enhance ??= 0;
   state.upgrades.shop ??= 0;
+  normalizeEquipment();
   state.dungeon.map ||= null;
   state.dungeon.currentNode ||= null;
   state.dungeon.runComplete ||= false;
@@ -403,6 +413,51 @@ function normalizeSettings(settings = {}) {
     screenshake: settings.screenshake ?? true,
     keybinds: { ...DEFAULT_KEYBINDS, ...(settings.keybinds || {}) }
   };
+}
+
+function normalizeEquipment() {
+  const weapon = state.hero.equipment.weapon;
+  const offhand = state.hero.equipment.offhand;
+  if (!offhand || canUseOffhandWithWeapon(offhand, weapon)) return;
+  state.hero.inventory.push(offhand);
+  state.hero.equipment.offhand = null;
+}
+
+function isTwoHandedWeapon(item) {
+  return item?.slot === "weapon" && (item.hands === 2 || item.type === "Two-Handed Sword" || item.type === "Magic Staff");
+}
+
+function isBowWeapon(item) {
+  return item?.type === "Bow" || item?.type === "Crossbow" || item?.class === "Bow" || item?.class === "Crossbow";
+}
+
+function isWandWeapon(item) {
+  return item?.type === "Wand" || item?.class === "Wand";
+}
+
+function isTome(item) {
+  return item?.type === "Tome" || item?.class === "Tome" || item?.mode === "tome";
+}
+
+function isQuiver(item) {
+  return item?.type === "Quiver" || item?.class === "Quiver" || item?.mode === "quiver";
+}
+
+function canUseOffhandWithWeapon(offhand, weapon) {
+  if (!offhand || offhand.slot !== "offhand") return true;
+  if (isTwoHandedWeapon(weapon)) return false;
+  if (isQuiver(offhand)) return isBowWeapon(weapon);
+  if (isTome(offhand)) return isWandWeapon(weapon);
+  if (isBowWeapon(weapon)) return false;
+  return true;
+}
+
+function offhandRequirementText(offhand, weapon = state.hero.equipment.weapon) {
+  if (isTwoHandedWeapon(weapon)) return `${weaponClass(weapon)} uses both hands.`;
+  if (isQuiver(offhand)) return "Quivers require a bow or crossbow.";
+  if (isTome(offhand)) return "Tomes require a wand.";
+  if (isBowWeapon(weapon)) return "Bows and crossbows can only use quivers off-hand.";
+  return "That off-hand item does not fit your weapon.";
 }
 
 function renderMenu() {
@@ -783,8 +838,8 @@ function updateMovement(dt, stats) {
     const dx = screenX * (TILE_H / TILE_W) + screenY;
     const dy = screenY - screenX * (TILE_H / TILE_W);
     const size = currentMapSize();
-    const nextX = clamp(state.player.x + dx * stats.speed * dt, 1.2, size - 1.2);
-    const nextY = clamp(state.player.y + dy * stats.speed * dt, 1.2, size - 1.2);
+    const nextX = clamp(state.player.x + dx * stats.moveSpeed * dt, 1.2, size - 1.2);
+    const nextY = clamp(state.player.y + dy * stats.moveSpeed * dt, 1.2, size - 1.2);
     movePlayerWithCollision(nextX, nextY);
     state.player.moveDir = Math.atan2(dy, dx);
     if (state.player.attackT <= 0 && !runtime.mouse.down && !isActionDown("attack")) {
@@ -852,6 +907,7 @@ function updateProjectiles(dt) {
     const projectile = runtime.projectiles[i];
     projectile.lastX = projectile.x;
     projectile.lastY = projectile.y;
+    if (room && state.area === "dungeon" && projectile.homing > 0) steerProjectile(projectile, room, dt);
     projectile.x += projectile.vx * dt;
     projectile.y += projectile.vy * dt;
     projectile.life -= dt;
@@ -903,8 +959,36 @@ function hitProjectileEnemy(projectile, enemy, room, multiplier = 1, triggerSpec
 
 function applyProjectileSpecials(projectile, enemy, room) {
   if (projectile.element === "fire") applyFireBurst(projectile, enemy, room);
+  else if (projectile.aoe > 0) applyImpactBurst(projectile, enemy, room);
   if (projectile.element === "ice") applyIceChill(projectile, enemy, room);
   if (projectile.chain > 0) applyChainHit(projectile, enemy, room);
+  if (projectile.forks > 0) applyForkShots(projectile, enemy, room);
+}
+
+function steerProjectile(projectile, room, dt) {
+  const target = nearestProjectileTarget(projectile, room, projectile.homingRange || 6.5);
+  if (!target) return;
+  const speed = projectile.speed || Math.hypot(projectile.vx, projectile.vy) || 1;
+  const current = Math.atan2(projectile.vy, projectile.vx);
+  const desired = Math.atan2(target.y - projectile.y, target.x - projectile.x);
+  const turn = clamp(projectile.homing * dt * 4, 0, 0.35);
+  const next = current + angleDelta(current, desired) * turn;
+  projectile.vx = Math.cos(next) * speed;
+  projectile.vy = Math.sin(next) * speed;
+}
+
+function nearestProjectileTarget(projectile, room, range) {
+  let target = null;
+  let best = Infinity;
+  for (const enemy of room.enemies) {
+    if (enemy.hp <= 0 || projectile.hit.includes(enemy.id)) continue;
+    const dist = distance(projectile, enemy);
+    if (dist <= range && dist < best) {
+      target = enemy;
+      best = dist;
+    }
+  }
+  return target;
 }
 
 function applyFireBurst(projectile, origin, room) {
@@ -935,6 +1019,23 @@ function applyIceChill(projectile, origin, room) {
   }
 }
 
+function applyImpactBurst(projectile, origin, room) {
+  const radius = projectile.aoe || 0;
+  if (radius <= 0) return;
+  spawnIndicator({ kind: "blast", x: origin.x, y: origin.y, radius, color: projectile.color, life: 0.24, max: 0.24, ring: true });
+  for (const enemy of room.enemies) {
+    if (enemy.hp <= 0 || enemy.id === origin.id || projectile.hit.includes(enemy.id)) continue;
+    if (distance(origin, enemy) > radius + enemy.radius) continue;
+    const damage = Math.max(2, Math.floor(projectile.damage * 0.38) - Math.floor(enemy.defense * 0.2));
+    projectile.hit.push(enemy.id);
+    enemy.hp -= damage;
+    enemy.hit = 0.14;
+    spawnFloater(`${damage}`, enemy.x, enemy.y, projectile.color);
+    for (let i = 0; i < 4; i++) spawnParticle(enemy.x, enemy.y, projectile.color, 1.1);
+    if (enemy.hp <= 0) killEnemy(enemy);
+  }
+}
+
 function applyChainHit(projectile, origin, room) {
   let from = origin;
   let multiplier = projectile.chainDamage || 0.58;
@@ -960,6 +1061,41 @@ function nearestChainTarget(from, room, range, hit) {
     }
   }
   return target;
+}
+
+function applyForkShots(projectile, origin, room) {
+  const targets = room.enemies
+    .filter((enemy) => enemy.hp > 0 && enemy.id !== origin.id && !projectile.hit.includes(enemy.id))
+    .map((enemy) => ({ enemy, dist: distance(origin, enemy) }))
+    .filter(({ dist }) => dist <= (projectile.forkRange || 4.2))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, projectile.forks);
+  for (const { enemy, dist } of targets) {
+    const angle = Math.atan2(enemy.y - origin.y, enemy.x - origin.x);
+    const forkSpeed = Math.max(4, (projectile.speed || Math.hypot(projectile.vx, projectile.vy) || 8) * 0.92);
+    spawnProjectile({
+      weapon: {
+        mode: "ranged",
+        projectile: projectile.kind,
+        projectileSpeed: forkSpeed,
+        color: projectile.color,
+        size: projectile.radius * 16,
+        pierce: 0,
+        chain: 0,
+        forks: 0,
+        homing: projectile.homing,
+        forkRange: 0
+      },
+      x: origin.x,
+      y: origin.y,
+      angle,
+      speed: forkSpeed,
+      range: Math.max(0.5, dist + 0.8),
+      damage: Math.max(2, Math.floor(projectile.damage * (projectile.forkDamage || 0.52))),
+      crit: projectile.crit,
+      hit: [...projectile.hit]
+    });
+  }
 }
 
 function updatePickups(dt) {
@@ -1000,11 +1136,11 @@ function updateFx(dt) {
 function playerAttack(source = "keyboard") {
   if (state.mode !== "game" || state.overlay) return;
   const stats = statBlock();
-  const weapon = state.hero.equipment.weapon || basicWeapon();
+  const weapon = combatWeapon();
   const range = weaponRange(weapon);
-  const speed = weapon?.speed || 0.45;
+  const attackSpeed = weaponAttackSpeed(weapon);
   if (state.player.attackCd > 0) return;
-  state.player.attackCd = speed;
+  state.player.attackCd = attackSpeed;
   state.player.attackT = weapon.mode === "melee" ? 0.18 : 0.12;
   state.player.dir = aimDirection(range, source);
   const room = state.dungeon.room;
@@ -1021,7 +1157,7 @@ function playerAttack(source = "keyboard") {
 }
 
 function basicWeapon() {
-  return { type: "Fists", class: "Unarmed", range: 1.05, speed: 0.5, mode: "melee", arc: 0.95, cleave: 1, color: "#d7a84f", size: 6 };
+  return { type: "Fists", class: "Unarmed", range: 1.05, attackSpeed: 0.5, mode: "melee", arc: 0.95, cleave: 1, color: "#d7a84f", size: 6 };
 }
 
 function aimDirection(range, source = "keyboard") {
@@ -1075,56 +1211,72 @@ function fireProjectile(weapon, stats, range) {
   const color = projectileColor(weapon);
   const px = state.player.x + Math.cos(state.player.dir) * 0.42;
   const py = state.player.y + Math.sin(state.player.dir) * 0.42;
+  const count = projectileCount(weapon);
+  const spread = projectileSpread(weapon, count);
+  for (let i = 0; i < count; i++) {
+    const offset = (i - (count - 1) / 2) * spread;
+    spawnProjectile({
+      weapon,
+      x: px,
+      y: py,
+      angle: state.player.dir + offset,
+      speed,
+      range,
+      damage: count > 1 ? Math.max(2, Math.floor(damage * 0.82)) : damage,
+      crit
+    });
+  }
+  for (let i = 0; i < 4; i++) spawnParticle(px, py, color, 1.1);
+}
+
+function spawnProjectile({ weapon, x, y, angle, speed, range, damage, crit, hit = [] }) {
   if (runtime.projectiles.length < MAX_PROJECTILES) {
     let proj = runtime.projectilePool.pop();
+    const projectile = {
+      x,
+      y,
+      lastX: x,
+      lastY: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      speed,
+      life: Math.max(0.3, range / speed),
+      radius: (weapon.size || 8) / 16,
+      damage,
+      color: projectileColor(weapon),
+      kind: weapon.projectile || "shot",
+      pierce: weapon.mode === "magic" && magicElement(weapon) === "lightning" ? 0 : projectilePierce(weapon),
+      chain: projectileChain(weapon),
+      chainRange: weapon.chainRange || 2.65,
+      chainDamage: weapon.chainDamage || 0.58,
+      element: weapon.mode === "magic" ? magicElement(weapon) : null,
+      splash: weapon.splash || (weapon.mode === "magic" ? 1.15 : 0),
+      aoe: weapon.aoe || 0,
+      chill: weapon.chill || 1.5,
+      forks: weapon.forks || 0,
+      forkRange: weapon.forkRange || 4.2,
+      forkDamage: weapon.forkDamage || 0.52,
+      homing: weapon.homing || 0,
+      homingRange: weapon.homingRange || 6.5,
+      crit,
+      hit
+    };
     if (proj) {
-      proj.x = px;
-      proj.y = py;
-      proj.lastX = px;
-      proj.lastY = py;
-      proj.vx = Math.cos(state.player.dir) * speed;
-      proj.vy = Math.sin(state.player.dir) * speed;
-      proj.life = Math.max(0.3, range / speed);
-      proj.radius = (weapon.size || 8) / 16;
-      proj.damage = damage;
-      proj.color = color;
-      proj.kind = weapon.projectile || "shot";
-      proj.pierce = weapon.mode === "magic" && magicElement(weapon) === "lightning" ? 0 : projectilePierce(weapon);
-      proj.chain = projectileChain(weapon);
-      proj.chainRange = weapon.chainRange || 2.65;
-      proj.chainDamage = weapon.chainDamage || 0.58;
-      proj.element = weapon.mode === "magic" ? magicElement(weapon) : null;
-      proj.splash = weapon.splash || (weapon.mode === "magic" ? 1.15 : 0);
-      proj.chill = weapon.chill || 1.5;
-      proj.crit = crit;
-      proj.hit = [];
+      Object.assign(proj, projectile);
     } else {
-      proj = {
-        x: px,
-        y: py,
-        lastX: px,
-        lastY: py,
-        vx: Math.cos(state.player.dir) * speed,
-        vy: Math.sin(state.player.dir) * speed,
-        life: Math.max(0.3, range / speed),
-        radius: (weapon.size || 8) / 16,
-        damage,
-        color,
-        kind: weapon.projectile || "shot",
-        pierce: weapon.mode === "magic" && magicElement(weapon) === "lightning" ? 0 : projectilePierce(weapon),
-        chain: projectileChain(weapon),
-        chainRange: weapon.chainRange || 2.65,
-        chainDamage: weapon.chainDamage || 0.58,
-        element: weapon.mode === "magic" ? magicElement(weapon) : null,
-        splash: weapon.splash || (weapon.mode === "magic" ? 1.15 : 0),
-        chill: weapon.chill || 1.5,
-        crit,
-        hit: []
-      };
+      proj = projectile;
     }
     runtime.projectiles.push(proj);
   }
-  for (let i = 0; i < 4; i++) spawnParticle(px, py, color, 1.1);
+}
+
+function projectileCount(weapon) {
+  return clamp(1 + (weapon.projectileCount || 0), 1, 5);
+}
+
+function projectileSpread(weapon, count) {
+  if (count <= 1) return 0;
+  return weapon.mode === "magic" ? 0.16 : 0.13;
 }
 
 function meleeCleave(weapon) {
@@ -1137,8 +1289,8 @@ function meleeCleave(weapon) {
 
 function projectilePierce(weapon) {
   if (weapon.mode !== "ranged") return Number.isFinite(weapon.pierce) ? weapon.pierce : 0;
-  if (weapon.effect === "chain") return 0;
   if (Number.isFinite(weapon.pierce) && weapon.pierce > 0) return weapon.pierce;
+  if (weapon.effect === "chain") return 0;
   return weapon.type === "Crossbow" ? 1 : 0;
 }
 
@@ -1162,6 +1314,38 @@ function weaponRange(weapon) {
   const range = weapon?.range || 1.35;
   if (weapon?.mode === "melee" && weapon.type !== "Fists" && !weapon.class) return range * 1.2;
   return range;
+}
+
+function weaponAttackSpeed(weapon) {
+  return weapon?.attackSpeed ?? weapon?.speed ?? 0.5;
+}
+
+function combatWeapon() {
+  return withOffhandModifiers(state.hero.equipment.weapon || basicWeapon(), state.hero.equipment.offhand);
+}
+
+function withOffhandModifiers(weapon, offhand) {
+  const active = { ...weapon };
+  if (!offhand || !canUseOffhandWithWeapon(offhand, weapon)) {
+    if (isBowWeapon(weapon)) active.attackSpeed = Number((weaponAttackSpeed(active) * 1.5).toFixed(3));
+    return active;
+  }
+  if (isTome(offhand)) {
+    active.projectileCount = (active.projectileCount || 0) + (offhand.projectileCount || 0);
+    active.homing = Math.max(active.homing || 0, offhand.homing || 0);
+    active.aoe = Math.max(active.aoe || 0, offhand.aoe || 0);
+    active.chain = (active.chain || 0) + (offhand.chain || 0);
+    if (offhand.aoe && active.element === "fire") active.splash = (active.splash || 1.15) + offhand.aoe * 0.45;
+    if (offhand.aoe && active.element === "ice") active.splash = (active.splash || 1.05) + offhand.aoe * 0.35;
+  }
+  if (isQuiver(offhand)) {
+    active.projectileSpeed = (active.projectileSpeed || 9) + (offhand.projectileSpeed || 0);
+    active.projectileCount = (active.projectileCount || 0) + (offhand.projectileCount || 0);
+    active.pierce = (active.pierce || 0) + (offhand.pierce || 0);
+    active.forks = (active.forks || 0) + (offhand.forks || 0);
+  }
+  if (isBowWeapon(weapon) && !isQuiver(offhand)) active.attackSpeed = Number((weaponAttackSpeed(active) * 1.5).toFixed(3));
+  return active;
 }
 
 function damageEnemy(target, stats, weapon, multiplier) {
@@ -2245,15 +2429,17 @@ function nodeLabel(kind) {
 
 function inventoryOverlay() {
   const stats = statBlock();
+  const weapon = combatWeapon();
   const capacity = bagCapacity();
   const filled = state.hero.inventory.length;
   const overflow = Math.max(0, filled - capacity);
   const visibleSlots = capacity + overflow;
   const equip = ["helm", "amulet", "weapon", "armor", "offhand", "gloves", "ring", "belt", "boots"].map((slot) => {
     const item = state.hero.equipment[slot];
+    const twoHandLocked = slot === "offhand" && !item && isTwoHandedWeapon(state.hero.equipment.weapon);
     return `<div class="paper-slot slot-${slot} ${item ? `has-tooltip rarity-${item.rarity || "common"}` : ""}" ${item ? `style="--item-color:${rarityColor(item)}" data-tooltip-tone="${tooltipTone(item)}" data-tooltip="${escapeAttr(itemTooltip(item, "equipped"))}"` : ""}>
       <span>${slotLabel(slot)}</span>
-      <b style="color:${item ? itemNameColor(item) : "#6a4a2c"}">${item ? escapeHtml(item.name) : "empty"}</b>
+      <b style="color:${item ? itemNameColor(item) : "#6a4a2c"}">${item ? escapeHtml(item.name) : twoHandLocked ? "two-handed" : "empty"}</b>
       ${item ? `<small class="item-statline">${escapeHtml(itemSummary(item))}</small>` : ""}
       ${item ? `<button onclick="unequip('${slot}')">X</button>` : ""}
     </div>`;
@@ -2267,7 +2453,7 @@ function inventoryOverlay() {
       </div>
       <div class="stats-list parchment-list">
         ${["str", "dex", "int", "vit"].map((stat) => `<button ${state.hero.points ? "" : "disabled"} onclick="allocateStat('${stat}')">${stat.toUpperCase()} ${stats[stat]} +</button>`).join("")}
-        <span>Power ${stats.power}</span><span>Attack ${stats.attack}</span><span>Defense ${stats.defense}</span><span>Crit ${Math.round(stats.crit * 100)}%</span><span>${attackStyleLabel()}</span>
+        <span>Power ${stats.power}</span><span>Attack ${stats.attack}</span><span>Defense ${stats.defense}</span><span>Move ${formatNumber(stats.moveSpeed)}</span><span>Attack Speed ${formatNumber(weaponAttackSpeed(weapon))}s</span><span>Crit ${Math.round(stats.crit * 100)}%</span><span>${attackStyleLabel()}</span>
       </div>
       <div class="bag-panel ${runtime.sellMode ? "sell-mode" : ""}">
         <div class="pack-head">
@@ -2347,6 +2533,7 @@ function weaponSummary(item) {
   const stats = statLines(item).join(" ");
   const cls = weaponClass(item);
   const mods = item.modifiers?.length ? ` ${item.modifiers.length} mod${item.modifiers.length === 1 ? "" : "s"}` : "";
+  if (isTome(item) || isQuiver(item)) return `${cls} ${stats} ${offhandEffectSummary(item)}${mods}`.trim();
   if (item.mode === "melee") return `${cls} ${stats} Cleave ${meleeCleave(item)}${mods}`.trim();
   if (item.mode === "ranged") {
     const pierce = projectilePierce(item);
@@ -2360,8 +2547,24 @@ function weaponSummary(item) {
   return `${stats}${mods}`.trim() || item.kind;
 }
 
+function offhandEffectSummary(item) {
+  const parts = [];
+  if (item.projectileSpeed) parts.push(`Proj speed +${formatNumber(item.projectileSpeed)}`);
+  if (item.projectileCount) parts.push(`Projectiles +${item.projectileCount}`);
+  if (item.pierce) parts.push(`Pierce +${item.pierce}`);
+  if (item.forks) parts.push(`Forks ${item.forks}`);
+  if (item.homing) parts.push(`Homing ${formatNumber(item.homing)}`);
+  if (item.aoe) parts.push(`AoE ${formatNumber(item.aoe)}`);
+  if (item.chain) parts.push(`Chain +${item.chain}`);
+  return parts.join(" ");
+}
+
 function itemCellStat(item) {
-  if (item.kind === "weapon") return item.stats?.attack ? `A+${item.stats.attack}` : "";
+  if (item.kind === "weapon") {
+    if (item.stats?.attack) return `A+${item.stats.attack}`;
+    if (item.stats?.defense) return `D+${item.stats.defense}`;
+    return "";
+  }
   if (item.kind === "armor") return item.stats?.defense ? `D+${item.stats.defense}` : "";
   if (item.slot === "belt") return `+${beltSlots(item)}`;
   if (item.kind === "accessory") return statLines(item)[0] || "";
@@ -2405,6 +2608,8 @@ function weaponClassTag(item) {
     Staff: "STF",
     Wand: "WND",
     Shield: "SHD",
+    Tome: "TOM",
+    Quiver: "QVR",
     Unarmed: "HND"
   };
   return tags[weaponClass(item)] || "WEA";
@@ -2422,6 +2627,7 @@ function itemTooltip(item, context = "bag") {
     lines.push(...item.modifiers.map((modifier) => `<div class="tooltip-mod ${tone}">${escapeHtml(`${modifier.name}: ${modifier.text}`)}</div>`));
   }
   if (item.kind === "weapon") lines.push(...weaponTooltipLines(item));
+  if (item.slot === "offhand" && !canUseOffhandWithWeapon(item, state.hero.equipment.weapon)) lines.push(tooltipNote(offhandRequirementText(item)));
   if (item.slot === "belt") lines.push(tooltipNote(`Pack slots +${beltSlots(item)}`));
   if (item.kind === "fertilizer") lines.push(tooltipNote(`Use at the tree: +${item.treeXp || 24} tree XP.`));
   if (item.kind === "consumable") lines.push(tooltipNote(`Use: ${consumableUseText(item)}.`));
@@ -2436,12 +2642,21 @@ function itemTooltip(item, context = "bag") {
 }
 
 function weaponTooltipLines(item) {
-  const lines = [tooltipNote(`${weaponClass(item)} ${title(item.mode)} attack. Range ${formatNumber(weaponRange(item))}. Speed ${formatNumber(item.speed || 0.5)}s.`)];
+  if (isTome(item) || isQuiver(item)) {
+    const lines = [tooltipNote(`${weaponClass(item)} off-hand. ${isTome(item) ? "Requires a wand." : "Requires a bow or crossbow."}`)];
+    const effects = offhandEffectSummary(item);
+    if (effects) lines.push(tooltipNote(effects));
+    return lines;
+  }
+  const lines = [tooltipNote(`${weaponClass(item)} ${title(item.mode)} attack. Range ${formatNumber(weaponRange(item))}. Attack Speed ${formatNumber(weaponAttackSpeed(item))}s.`)];
+  if (isTwoHandedWeapon(item)) lines.push(tooltipNote("Uses both hands and disables the off-hand slot."));
   if (item.mode === "melee") lines.push(tooltipNote(`Cleave hits up to ${meleeCleave(item)} enemies inside the swing arc.`));
   if (item.mode === "ranged") {
     const chain = projectileChain(item);
     if (chain) lines.push(tooltipNote(`Shots chain to ${chain} nearby target${chain === 1 ? "" : "s"} after impact.`));
     else lines.push(tooltipNote(`Shots pierce ${projectilePierce(item)} additional target${projectilePierce(item) === 1 ? "" : "s"}.`));
+    if (isBowWeapon(item)) lines.push(tooltipNote("Only quivers can be equipped off-hand with this weapon."));
+    if (isBowWeapon(item)) lines.push(tooltipNote("Without a quiver, attacks are 50% slower."));
   }
   if (item.mode === "magic") {
     const element = ELEMENTS[magicElement(item)];
@@ -2510,7 +2725,7 @@ function slotLabel(slot) {
 }
 
 function attackStyleLabel() {
-  const weapon = state.hero.equipment.weapon || basicWeapon();
+  const weapon = combatWeapon();
   const cls = weaponClass(weapon);
   if (weapon.mode === "ranged") return `${cls}: ${projectileChain(weapon) ? "chain shot" : "piercing shot"}`;
   if (weapon.mode === "magic") return `${cls}: ${ELEMENTS[magicElement(weapon)].name} spell`;
@@ -2743,9 +2958,11 @@ function makeItem(kind, level = 1, boost = 0) {
     item.class = base.class || base.type;
     item.name = rarity.name === "common" ? base.type : `${title(rarity.name)} ${base.type}`;
     item.slot = base.slot;
+    item.hands = base.hands || 1;
+    item.compatibleWeapons = base.compatibleWeapons;
     item.value = itemValue(level, rarityMult(WEAPON_RARITY_MULTS, profile, "value", rarity.name));
     item.range = base.range;
-    item.speed = base.speed;
+    item.attackSpeed = base.attackSpeed ?? base.speed;
     item.mode = base.mode;
     item.arc = base.arc;
     item.projectile = base.projectile;
@@ -2753,6 +2970,10 @@ function makeItem(kind, level = 1, boost = 0) {
     item.color = base.color;
     item.size = base.size;
     item.pierce = base.pierce || 0;
+    item.projectileCount = base.projectileCount || 0;
+    item.forks = base.forks || 0;
+    item.homing = base.homing || 0;
+    item.aoe = base.aoe || 0;
     if (base.mode === "melee") {
       const baseCleave = base.type === "Two-Handed Sword" || base.type === "Axe" ? 3 : base.type === "Spear" ? 2 : 2;
       item.cleave = Math.min(6, baseCleave + Math.floor(rarityRank(rarity.name) / 2) + Math.floor(level / 6));
@@ -2786,15 +3007,25 @@ function makeItem(kind, level = 1, boost = 0) {
         defense: Math.ceil((5 + level * 1.8) * rarityMult(WEAPON_RARITY_MULTS, profile, "defense", rarity.name)),
         hp: Math.ceil((8 + level * 3) * rarityMult(WEAPON_RARITY_MULTS, profile, "hp", rarity.name))
       };
+    } else if (base.mode === "tome") {
+      item.stats = {
+        attack: Math.ceil((3 + level * 1.45) * rarityMult(WEAPON_RARITY_MULTS, profile, "attack", rarity.name)),
+        int: Math.ceil((1 + level * 0.22) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
+      };
+    } else if (base.mode === "quiver") {
+      item.stats = {
+        attack: Math.ceil((3 + level * 1.35) * rarityMult(WEAPON_RARITY_MULTS, profile, "attack", rarity.name)),
+        dex: Math.ceil((1 + level * 0.2) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
+      };
     } else if (base.stat === "int") {
       item.stats = {
-        attack: Math.ceil((5 + level * 2.2) * rarityMult(WEAPON_RARITY_MULTS, profile, "attack", rarity.name)),
-        int: Math.ceil((1 + level * 0.3) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
+        attack: Math.ceil((5 + level * 2.2) * (base.attackMult || 1) * rarityMult(WEAPON_RARITY_MULTS, profile, "attack", rarity.name)),
+        int: Math.ceil((1 + level * 0.3) * (base.statMult || 1) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
       };
     } else {
       item.stats = {
-        attack: Math.ceil((6 + level * 2.5) * rarityMult(WEAPON_RARITY_MULTS, profile, "attack", rarity.name)),
-        [base.stat]: Math.ceil(Math.max(0.2, level * 0.22) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
+        attack: Math.ceil((6 + level * 2.5) * (base.attackMult || 1) * rarityMult(WEAPON_RARITY_MULTS, profile, "attack", rarity.name)),
+        [base.stat]: Math.ceil(Math.max(0.2, level * 0.22) * (base.statMult || 1) * rarityMult(WEAPON_RARITY_MULTS, profile, "stat", rarity.name))
       };
     }
     randomizeWeaponBaseStats(item, rarity.name);
@@ -2902,8 +3133,9 @@ function rollWeaponModifierCount(rarityName) {
 }
 
 function weaponModifierCandidates(mode) {
+  const offhandModes = ["guard", "tome", "quiver"];
   return [
-    ...(WEAPON_MODIFIER_POOLS.any || []),
+    ...(offhandModes.includes(mode) ? [] : (WEAPON_MODIFIER_POOLS.any || [])),
     ...(WEAPON_MODIFIER_POOLS[mode] || [])
   ];
 }
@@ -3120,11 +3352,24 @@ function equipItem(id) {
   if (runtime.sellMode) return sellItem(id);
   const item = state.hero.inventory.find((entry) => entry.id === id);
   if (!item?.slot) return;
+  if (item.slot === "offhand" && !canUseOffhandWithWeapon(item, state.hero.equipment.weapon)) {
+    toast(offhandRequirementText(item));
+    return;
+  }
   removeItem(id, 1);
+  const displaced = [];
+  if (item.slot === "weapon") {
+    const offhand = state.hero.equipment.offhand;
+    if (offhand && !canUseOffhandWithWeapon(offhand, item)) {
+      state.hero.equipment.offhand = null;
+      displaced.push(offhand);
+    }
+  }
   const old = state.hero.equipment[item.slot];
-  if (old) addItem(old);
+  if (old) displaced.push(old);
   item.qty = 1;
   state.hero.equipment[item.slot] = item;
+  for (const displacedItem of displaced) addItem(displacedItem);
   state.hero.hp = Math.min(state.hero.hp, statBlock().maxHp);
   toast(`Equipped ${item.name}`);
   saveGame();
