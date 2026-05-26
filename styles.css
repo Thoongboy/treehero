@@ -1127,6 +1127,18 @@ select {
   font-weight: 800;
 }
 
+.menu-save-slots {
+  margin: 0;
+}
+
+.menu-save-slots[hidden] {
+  display: none;
+}
+
+.menu-save-slot {
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
 .pause-menu,
 .keybind-list {
   display: grid;

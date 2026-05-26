@@ -461,7 +461,17 @@ function offhandRequirementText(offhand, weapon = state.hero.equipment.weapon) {
 }
 
 function renderMenu() {
-  const hasSave = saveSystem.hasSave();
+  const saveSlots = saveSystem.listSlots(SAVE_SLOT_COUNT);
+  const hasSave = saveSlots.some(({ exists }) => exists);
+  const hasActiveSave = saveSystem.hasSave(runtime.activeSaveSlot);
+  const continueSlots = saveSlots.map(({ slot, exists, summary }) => {
+    const active = exists && slot === runtime.activeSaveSlot ? " active" : "";
+    const details = saveSlotDetails(exists, summary);
+    return `<div class="save-slot menu-save-slot${active}">
+      <div><b>Slot ${slot}</b><span>${details}</span></div>
+      <button class="gold" ${exists ? "" : "disabled"} onclick="continueGame(${slot})">Play</button>
+    </div>`;
+  }).join("");
   const originOptions = Object.keys(ORIGIN_STARTS)
     .map((origin) => `<option>${escapeHtml(origin)}</option>`)
     .join("");
@@ -475,10 +485,11 @@ function renderMenu() {
           <h1>Tree's Hero</h1>
           <p>Move through the grove, dive into branching dungeon rooms, fight in real time, grab loot, and feed the tree to unlock power.</p>
           <div class="menu-actions">
-            <button class="gold" ${hasSave ? "" : "disabled"} onclick="continueGame()">Continue</button>
+            <button class="gold" ${hasSave ? "" : "disabled"} onclick="showContinueSlots()">Continue</button>
             <button onclick="showCreator()">New Hero</button>
-            <button ${hasSave ? "" : "disabled"} onclick="deleteSave()">Delete Save</button>
+            <button ${hasActiveSave ? "" : "disabled"} onclick="deleteSave()">Delete Save</button>
           </div>
+          <div id="continue-slots" class="save-slots menu-save-slots" hidden>${continueSlots}</div>
           <form id="creator" class="creator" hidden onsubmit="event.preventDefault(); startNewHero(this)">
             <label>Hero Name<input name="heroName" maxlength="18" placeholder="Ash" /></label>
             <label>Origin<select name="origin">${originOptions}</select></label>
@@ -490,8 +501,28 @@ function renderMenu() {
   `;
 }
 
+function saveSlotDetails(exists, summary) {
+  const level = Number.isFinite(Number(summary?.level)) ? Number(summary.level) : 1;
+  const treeLevel = Number.isFinite(Number(summary?.treeLevel)) ? Number(summary.treeLevel) : 1;
+  const depth = Number.isFinite(Number(summary?.depth)) ? Number(summary.depth) : 0;
+  return exists
+    ? `${escapeHtml(summary?.hero || "Hero")} Lv ${level} - Tree ${treeLevel} - ${escapeHtml(summary?.area || "grove")}${depth ? ` - best depth ${depth}` : ""}`
+    : "Empty slot";
+}
+
+function showContinueSlots() {
+  const slots = document.getElementById("continue-slots");
+  if (!slots) return;
+  slots.hidden = !slots.hidden;
+  const creator = document.getElementById("creator");
+  if (creator && !slots.hidden) creator.hidden = true;
+}
+
 function showCreator() {
-  document.getElementById("creator").hidden = false;
+  const creator = document.getElementById("creator");
+  if (creator) creator.hidden = false;
+  const slots = document.getElementById("continue-slots");
+  if (slots) slots.hidden = true;
 }
 
 function mountGame() {
@@ -2887,9 +2918,7 @@ function questsOverlay() {
 function saveOverlay() {
   const slots = saveSystem.listSlots(SAVE_SLOT_COUNT).map(({ slot, exists, summary }) => {
     const active = slot === runtime.activeSaveSlot ? " active" : "";
-    const details = exists
-      ? `${escapeHtml(summary.hero)} Lv ${summary.level} - Tree ${summary.treeLevel} - ${escapeHtml(summary.area)}${summary.depth ? ` - best depth ${summary.depth}` : ""}`
-      : "Empty slot";
+    const details = saveSlotDetails(exists, summary);
     return `<div class="save-slot${active}">
       <div><b>Slot ${slot}</b><span>${details}</span></div>
       <button onclick="saveToSlot(${slot})">Save</button>
@@ -3758,6 +3787,7 @@ function rarityRank(name) {
 Object.assign(window, {
   startNewHero,
   continueGame,
+  showContinueSlots,
   showCreator,
   deleteSave,
   toggleOverlay,
