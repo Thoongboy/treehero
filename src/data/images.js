@@ -61,6 +61,7 @@ export const placeholderImagePaths = {
   "portal.return": assetPath("portals/return.png"),
 
   "obstacle.pillar": assetPath("obstacles/pillar.png"),
+  "obstacle.crate": assetPath("obstacles/crate.png"),
   "obstacle.roots": assetPath("obstacles/roots.png"),
   "obstacle.rubble": assetPath("obstacles/rubble.png"),
 
@@ -83,7 +84,10 @@ export const placeholderImagePaths = {
 };
 
 export const firstImagePreloadIds = [
-  "splash.main"
+  "splash.main",
+  "tree.trunk",
+  "tree.crown",
+  "tree.sapling"
 ];
 
 export function createPlaceholderImageSourceMap(placeholderIds = []) {

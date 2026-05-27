@@ -41,6 +41,7 @@
     "portal.floor": { label: "Floor clear next-path portal", category: "portal", shape: "portal", fill: "#7fc1ee", stroke: "#d9f2ff", glyph: "NEXT" },
     "portal.return": { label: "Return-to-grove portal", category: "portal", shape: "portal", fill: "#77b86b", stroke: "#d7ffd0", glyph: "HOME" },
     "obstacle.pillar": { label: "Stone pillar obstacle", category: "obstacle", shape: "pillar", fill: "#44445a", stroke: "#242431", glyph: "PIL" },
+    "obstacle.crate": { label: "Breakable cache crate", category: "obstacle", shape: "square", fill: "#9d6a3d", stroke: "#4b2f1d", glyph: "BOX" },
     "obstacle.roots": { label: "Tangled root obstacle", category: "obstacle", shape: "roots", fill: "#6d4328", stroke: "#2b1a11", glyph: "ROOT" },
     "obstacle.rubble": { label: "Rubble obstacle", category: "obstacle", shape: "rock", fill: "#787069", stroke: "#302d2a", glyph: "RUB" },
     "monster.gnawer": { label: "Gnawer melee monster", category: "monster", shape: "monster", fill: "#6e3635", stroke: "#2b1717", glyph: "GNA" },
@@ -61,11 +62,27 @@
   const ANIMATIONS = {
     "character.hero.idle": { label: "Hero idle animation", asset: "character.hero", frames: 4, fps: 5 },
     "character.hero.attack": { label: "Hero attack animation", asset: "character.hero", frames: 3, fps: 12 },
+    "character.hero.walk": { label: "Hero walk animation", asset: "character.hero", frames: 4, fps: 8 },
+    "character.hero.roll": { label: "Hero dodge roll animation", asset: "character.hero", frames: 4, fps: 14 },
+    "character.hero.dash": { label: "Hero dash animation", asset: "character.hero", frames: 4, fps: 14 },
+    "monster.idle": { label: "Monster idle animation", asset: "monster.gnawer", frames: 4, fps: 4 },
     "monster.walk": { label: "Monster bob/walk animation", asset: "monster.gnawer", frames: 4, fps: 6 },
+    "monster.attack": { label: "Monster attack animation", asset: "monster.gnawer", frames: 3, fps: 9 },
+    "monster.dash": { label: "Monster dash animation", asset: "monster.gnawer", frames: 4, fps: 12 },
     "effect.portal": { label: "Portal pulse animation", asset: "portal.floor", frames: 6, fps: 8 },
     "effect.campfire": { label: "Campfire flicker animation", asset: "campfire", frames: 5, fps: 10 },
     "effect.slash": { label: "Melee slash animation", asset: "effect.slash", frames: 4, fps: 14 }
   };
+  for (const direction of ["up", "down", "left", "right"]) {
+    for (const state of ["idle", "walk", "attack", "roll", "dash"]) {
+      const base = ANIMATIONS[`character.hero.${state}`] || ANIMATIONS["character.hero.idle"];
+      ANIMATIONS[`character.hero.${state}.${direction}`] = { ...base, label: `${base.label} ${direction}` };
+    }
+    for (const state of ["idle", "walk", "attack", "dash"]) {
+      const base = ANIMATIONS[`monster.${state}`] || ANIMATIONS["monster.walk"];
+      ANIMATIONS[`monster.${state}.${direction}`] = { ...base, label: `${base.label} ${direction}` };
+    }
+  }
 
   const imageSources = new Map();
   const imageCache = new Map();
@@ -102,7 +119,7 @@
   function drawAnimation(ctx, key, x, y, time, options = {}) {
     const animation = ANIMATIONS[key] || ANIMATIONS["character.hero.idle"];
     const frame = Math.floor((time || 0) / 1000 * animation.fps) % animation.frames;
-    draw(ctx, options.asset || animation.asset, x, y + Math.sin(frame / animation.frames * Math.PI * 2) * (options.bob || 2), {
+    return draw(ctx, options.asset || animation.asset, x, y + Math.sin(frame / animation.frames * Math.PI * 2) * (options.bob || 2), {
       ...options,
       frame,
       scale: (options.scale || 1) * (1 + Math.sin(frame / animation.frames * Math.PI * 2) * 0.025)

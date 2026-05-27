@@ -2,6 +2,8 @@
 
 Drop PNG files at these paths. If a file is missing, the game keeps drawing the matching `placeholders.js` placeholder and loads only a couple of images at a time.
 
+Run `node scripts/generate-asset-placeholders.mjs` to create drawable PNG template files at every missing path. It skips existing art; add `--force` only when you intentionally want to overwrite current PNGs.
+
 | Placeholder ID | Image path |
 | --- | --- |
 | `splash.main` | `src/assets/art/main_splash.png` |
@@ -43,6 +45,7 @@ Drop PNG files at these paths. If a file is missing, the game keeps drawing the 
 | `portal.floor` | `src/assets/portals/floor.png` |
 | `portal.return` | `src/assets/portals/return.png` |
 | `obstacle.pillar` | `src/assets/obstacles/pillar.png` |
+| `obstacle.crate` | `src/assets/obstacles/crate.png` |
 | `obstacle.roots` | `src/assets/obstacles/roots.png` |
 | `obstacle.rubble` | `src/assets/obstacles/rubble.png` |
 | `monster.gnawer` | `src/assets/monsters/gnawer.png` |

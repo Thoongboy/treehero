@@ -41,25 +41,64 @@ export function getDungeonNodeKind(row, col) {
 }
 
 export function createDungeonMap() {
-  const rows = DUNGEON_ROUTE_ROW_SHAPES.map((shape, row) =>
-    shape.map((x, col) => ({
+  const rowCount = DUNGEON_ROUTE_ROW_SHAPES.length;
+  const rows = Array.from({ length: rowCount }, (_, row) => {
+    const last = row === rowCount - 1;
+    const count = last ? 1 : row === 0 ? randomInt(2, 4) : randomInt(3, 5);
+    return randomRouteXs(count).map((x, col) => ({
       id: `r${row}c${col}`,
       row,
       col,
       x,
-      y: 0.88 - row * 0.125,
-      kind: row === DUNGEON_ROUTE_ROW_SHAPES.length - 1 ? "boss" : getDungeonNodeKind(row, col),
+      y: clamp(0.88 - row * 0.125 + rand(-0.018, 0.018), 0.08, 0.9),
+      kind: last ? "boss" : randomNodeKind(row),
       next: [],
       done: false
-    }))
-  );
+    }));
+  });
   for (let row = 0; row < rows.length - 1; row++) {
+    const incoming = new Map(rows[row + 1].map((node) => [node.id, 0]));
     for (const node of rows[row]) {
-      const next = [...rows[row + 1]].sort((a, b) => Math.abs(a.x - node.x) - Math.abs(b.x - node.x));
-      node.next = next.slice(0, row % 2 === 0 ? 2 : 1).map((entry) => entry.id);
+      const next = rows[row + 1]
+        .map((entry) => ({ entry, score: Math.abs(entry.x - node.x) + rand(0, 0.08) }))
+        .sort((a, b) => a.score - b.score)
+        .map(({ entry }) => entry);
+      const maxLinks = Math.min(3, next.length);
+      const linkCount = row === rows.length - 2 ? 1 : randomInt(1, maxLinks);
+      node.next = next.slice(0, linkCount).map((entry) => entry.id);
+      for (const id of node.next) incoming.set(id, (incoming.get(id) || 0) + 1);
+    }
+    for (const nextNode of rows[row + 1]) {
+      if (incoming.get(nextNode.id)) continue;
+      const parent = [...rows[row]].sort((a, b) => Math.abs(a.x - nextNode.x) - Math.abs(b.x - nextNode.x))[0];
+      if (parent && !parent.next.includes(nextNode.id)) parent.next.push(nextNode.id);
     }
   }
   return { rows, route: [] };
+}
+
+function randomRouteXs(count) {
+  if (count === 1) return [0.5 + rand(-0.04, 0.04)];
+  return Array.from({ length: count }, (_, index) => {
+    const t = count === 1 ? 0.5 : index / (count - 1);
+    return clamp(0.16 + t * 0.68 + rand(-0.045, 0.045), 0.12, 0.88);
+  }).sort((a, b) => a - b);
+}
+
+function randomNodeKind(row) {
+  if (row === 0) return Math.random() < 0.18 ? "cache" : "monster";
+  const roll = Math.random();
+  if (roll < 0.18) return "elite";
+  if (roll < 0.42) return "cache";
+  return "monster";
+}
+
+function randomInt(min, max) {
+  return Math.floor(rand(min, max + 1));
+}
+
+function rand(min, max) {
+  return min + Math.random() * (max - min);
 }
 
 export function chooseMonsterArchetype({ archetypes, type, threat, index }) {

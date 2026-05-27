@@ -18,8 +18,9 @@ export function createPickupSystem({
     for (const pickup of room.pickups || []) {
       pickup.t = (pickup.t || 0) + dt;
       const d = distance(pickup, player);
-      if (d < magnetRange && d > 0.001) {
-        const pull = d < 0.95 ? 6.8 : 3.1;
+      const forced = pickup.flyToPlayer || pickup.forcePull;
+      if ((forced || d < magnetRange) && d > 0.001) {
+        const pull = forced ? Math.min(18, Math.max(8, d * 8.5)) : d < 0.95 ? 6.8 : 3.1;
         const angle = Math.atan2(player.y - pickup.y, player.x - pickup.x);
         pickup.x += Math.cos(angle) * pull * dt;
         pickup.y += Math.sin(angle) * pull * dt;
@@ -42,5 +43,11 @@ export function createPickupSystem({
     return count;
   }
 
-  return { update, collect };
+  function pullAll(room) {
+    if (!room?.pickups?.length) return 0;
+    for (const pickup of room.pickups) pickup.flyToPlayer = true;
+    return room.pickups.reduce((sum, pickup) => sum + (pickup.item.qty || 1), 0);
+  }
+
+  return { update, collect, pullAll };
 }

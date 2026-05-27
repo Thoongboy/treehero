@@ -9,7 +9,7 @@ export const PLAYER_DEFAULTS = {
   hp: 120,
   base: { str: 5, dex: 5, int: 5, vit: 6 },
   points: 0,
-  startPosition: { x: 8.5, y: 11.5, dir: 0, moveDir: 0, attackCd: 0, attackT: 0, invuln: 0 }
+  startPosition: { x: 8.5, y: 11.5, dir: 0, moveDir: 0, attackCd: 0, attackT: 0, rollCd: 0, rollT: 0, rollDir: 0, invuln: 0 }
 };
 
 export const DEFAULT_KEYBINDS = {
@@ -22,6 +22,7 @@ export const DEFAULT_KEYBINDS = {
   moveLeftAlt: "ArrowLeft",
   moveRightAlt: "ArrowRight",
   attack: "Space",
+  dodge: "ShiftLeft",
   interact: "KeyE",
   potion: "Digit1",
   bag: "KeyB",

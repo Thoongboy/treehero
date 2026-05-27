@@ -28,6 +28,7 @@ export function ensureAnimation(entity) {
       lastX: entity.x,
       lastY: entity.y,
       state: "idle",
+      direction: "down",
       facing: 1
     };
   }
@@ -36,9 +37,15 @@ export function ensureAnimation(entity) {
 
 export function actorAnimationKey(entity, type) {
   const animation = ensureAnimation(entity);
-  if (type === "hero") return animation?.state === "attack" ? "character.hero.attack" : "character.hero.idle";
-  if (type === "enemy") return "monster.walk";
+  const direction = animation?.direction || "down";
+  const state = animation?.state || "idle";
+  if (type === "hero") return `character.hero.${state}.${direction}`;
+  if (type === "enemy") return `monster.${state}.${direction}`;
   return "character.hero.idle";
+}
+
+export function actorAnimationDirection(entity) {
+  return ensureAnimation(entity)?.direction || "down";
 }
 
 function updateActor(entity, dt) {
@@ -48,10 +55,27 @@ function updateActor(entity, dt) {
   const dx = entity.x - animation.lastX;
   const dy = entity.y - animation.lastY;
   const speed = Math.hypot(dx, dy) / Math.max(dt, 0.001);
-  animation.state = entity.attackT > 0 ? "attack" : speed > 0.01 ? "walk" : "idle";
-  if (Math.abs(dx) > 0.001) animation.facing = dx >= 0 ? 1 : -1;
+  animation.state = entity.rollT > 0 ? "roll" : entity.dash ? "dash" : entity.attackT > 0 ? "attack" : speed > 0.01 ? "walk" : "idle";
+  const angle = facingAngle(entity, dx, dy, speed);
+  animation.direction = directionFromAngle(angle);
+  animation.facing = animation.direction === "left" ? -1 : 1;
   animation.lastX = entity.x;
   animation.lastY = entity.y;
+}
+
+function facingAngle(entity, dx, dy, speed) {
+  if (entity.rollT > 0 && Number.isFinite(entity.rollDir)) return entity.rollDir;
+  if (entity.dash && Number.isFinite(entity.dash.dir)) return entity.dash.dir;
+  if (Number.isFinite(entity.dir)) return entity.dir;
+  if (speed > 0.01) return Math.atan2(dy, dx);
+  return 0;
+}
+
+function directionFromAngle(angle) {
+  const x = Math.cos(angle);
+  const y = Math.sin(angle);
+  if (Math.abs(x) > Math.abs(y)) return x >= 0 ? "right" : "left";
+  return y >= 0 ? "down" : "up";
 }
 
 function updateObject(entity, dt) {
